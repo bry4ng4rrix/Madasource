@@ -9,220 +9,329 @@ Jour 2 · 2026-10-12 · Statut : proposition à valider. Document vivant :
 - documents au Jour 29 ;
 - vérification complète à l'Audit B.
 
-Sources : CdC §11, §26, §52-54, §60-61 ; RJ section 1 ; OWASP API Security Top 10 (édition 2023) ; matrices de [actors-and-permissions.md](actors-and-permissions.md).
-Décisions de sécurité : identifiants **S-NN** (section 17).
+Sources : CdC §2, §11, §17, §26, §30, §52-54, §60-61, §68 ; RJ section 1 ; OWASP API Security Top 10 (édition 2023) ; matrices de [actors-and-permissions.md](actors-and-permissions.md).
+Ce document intègre la relecture de l'agent `security-auditor` du Jour 2 (section 22).
+Décisions de sécurité : identifiants **S-NN** ; statuts Retenu / Proposé / À VALIDER, comme dans [architecture.md](architecture.md).
 
 ## 1. Actifs à protéger
 
 | Actif | Exemples | Gravité d'une fuite ou d'une altération |
 |---|---|---|
 | Composantes de prix internes | Prix net fournisseur, coûts externes, marge, commission (CdC §2, §17, §61) | Critique : cœur du modèle commercial A (R-01) |
-| Données bancaires et fiscales | Informations de l'exportateur (CdC §11) | Critique |
-| Comptes et sessions | Mots de passe, jetons | Critique |
-| Documents privés | Immatriculation, contrats, justificatifs de paiement, documents d'export (CdC §26, §61) | Élevée |
+| Coordonnées bancaires | Exportateurs (CdC §11) **et MadaSource** (paramètres) | Critique : détournement de paiement |
+| Comptes et sessions | Mots de passe, jetons, comptes admin | Critique |
+| Documents privés | Immatriculation, contrats, factures, justificatifs, documents d'export (CdC §26, §61) | Élevée |
 | Intégrité des transactions | Propositions, acceptation, Trade, statuts, paiements enregistrés | Élevée (fraude, litige) |
-| Communications privées | Conversations entre acheteur et exportateur (CdC §61) | Élevée |
-| Données personnelles | Noms, emails, téléphones, adresses des contacts | Élevée (Q-68) |
-| Journal d'audit | Traçabilité des actions (CdC §52) | Élevée |
-| Confiance | Badges de vérification, avis (CdC §8, §42) | Élevée |
+| Communications privées | Conversations, questions sur les RFQ (CdC §61) | Élevée |
+| Données personnelles | Contacts des organisations | Élevée (Q-68) |
+| Journal d'audit | Traçabilité (CdC §52) | Élevée |
+| Confiance | Badges de vérification, Passport, avis, indicateurs (CdC §8-9, §42-43) | Élevée |
 
 ## 2. Acteurs de menace
 
-1. **Visiteur anonyme** : collecte automatisée du catalogue, spam d'inscriptions et de RFQ, attaque des mots de passe.
-2. **Utilisateur d'une autre organisation** : accès horizontal à une RFQ, une quotation, un Trade ou un document (BOLA).
-3. **Membre d'une organisation** : action hors de son rôle (élévation verticale).
-4. **Partie commerciale curieuse** : l'exportateur cherche la marge ou le prix acheteur, l'acheteur cherche le prix net.
-5. **Compte compromis** : vol de mot de passe ou de jeton.
-6. **Administrateur** : erreur ou abus. Moindre privilège et traçabilité complète.
-7. **Contenu malveillant** : fichier piégé, texte injecté.
-8. **Dépendance compromise** : chaîne d'approvisionnement logicielle.
+1. **Visiteur anonyme** : collecte du catalogue, spam d'inscriptions et de RFQ, attaque des mots de passe, énumération des comptes.
+2. **Utilisateur d'une autre organisation** : accès horizontal (BOLA), y compris par un identifiant glissé dans un corps de requête.
+3. **Exportateur concurrent destinataire de la même RFQ** : lecture des questions, documents ou conversations d'un autre exportateur.
+4. **Partie commerciale curieuse** : l'exportateur cherche la marge ou le prix acheteur, l'acheteur cherche le prix net, par lecture directe ou par recoupement.
+5. **Membre d'une organisation** : action hors de son rôle (modifier l'IBAN, ajouter des membres).
+6. **Compte compromis**, et en particulier **compte admin compromis** : impact transversal.
+7. **Administrateur** : erreur, abus ou fraude interne (confirmation de paiement fictif).
+8. **Fraudeur utilisant l'instance DEMO** : fausses confirmations présentées comme réelles.
+9. **Contenu malveillant** : fichier piégé, texte injecté, métadonnées embarquées.
+10. **Dépendance compromise** : chaîne d'approvisionnement logicielle.
 
 ## 3. OWASP API Security Top 10 (2023) : contrôles MadaSource
 
-| Risque | Contrôle principal | Section | Jour |
+| Risque | Contrôles | Sections | Jours |
 |---|---|---|---|
-| API1 Broken Object Level Authorization | Accès aux objets par requêtes filtrées par l'acteur, 404 hors périmètre, tests inter-organisations | 5 | 9 et chaque module |
-| API2 Broken Authentication | Hachage Argon2id, jetons courts, rotation et révocation des sessions, limites de débit | 4 | 8, 10, 11 |
-| API3 Broken Object Property Level Authorization | Schémas par audience, entrée `extra="forbid"`, listes de champs autorisés, test statique de l'OpenAPI | 6 | Chaque module |
-| API4 Unrestricted Resource Consumption | Pagination bornée, limites de taille, délais SQL, limites de débit | 9 | 5, 8 |
-| API5 Broken Function Level Authorization | Permission explicite sur chaque route privée, refus par défaut, permissions admin granulaires | 5 | 9 |
-| API6 Unrestricted Access to Sensitive Business Flows | Limites sur l'inscription, les RFQ et les propositions ; idempotence des actions critiques ; transitions contrôlées | 5, 9 | 19 à 33 |
-| API7 Server Side Request Forgery | Aucun appel sortant vers une URL fournie par un utilisateur en V1 (par exemple le site web d'un acheteur n'est jamais appelé) | 8 | Tous |
-| API8 Security Misconfiguration | Garde-fous de configuration en production, en-têtes, CORS strict, documentation désactivée en production | 10 | 4, 5 |
-| API9 Improper Inventory Management | OpenAPI à jour, routes des modules désactivés non montées, versionnement | — | 5, Audit D |
+| API1 Broken Object Level Authorization | Politique d'accès par objet ; participation matérialisée ; identifiants du corps contrôlés ; collections imbriquées filtrées ; 404 | 5 | 9 et chaque module |
+| API2 Broken Authentication | Argon2id, jetons courts, sessions révocables, détection de rejeu, réponses non énumérantes, second facteur admin | 4 | 8, 10, 11 |
+| API3 Broken Object Property Level Authorization | Projections par audience, liste blanche des champs modifiables, non-déduction des prix | 6, 7 | Chaque module |
+| API4 Unrestricted Resource Consumption | Pagination bornée, limites de taille, délais SQL, limites de débit | 15 | 5, 8 |
+| API5 Broken Function Level Authorization | Refus par défaut, permission explicite par route, ensembles de permissions admin | 5 | 9 |
+| API6 Unrestricted Access to Sensitive Business Flows | Quotas par organisation, plafond de destinataires, séparation des tâches sur les paiements, version de l'offre acceptée | 6, 8, 15 | 19 à 33 |
+| API7 Server Side Request Forgery | Aucune requête sortante vers une URL fournie par un utilisateur | 14 | Tous |
+| API8 Security Misconfiguration | Garde-fous de démarrage, en-têtes, CORS strict, OpenAPI non public en production | 16 | 4, 5 |
+| API9 Improper Inventory Management | OpenAPI à jour, routes des modules désactivés non montées, routes admin hors de tout schéma public | 16 | 5, Audit D |
 | API10 Unsafe Consumption of APIs | Réponses des tiers validées, délais d'expiration, couche d'intégration (D-21) | — | Intégrations futures |
 
 ## 4. Authentification
 
-| ID | Proposition | Statut |
+| ID | Décision | Statut |
 |---|---|---|
-| S-01 | Mots de passe hachés en **Argon2id** par une bibliothèque maintenue (choix au Jour 8). Paramètres alignés sur les recommandations OWASP en vigueur, vérifiées au Jour 8. Rehachage transparent à la connexion si les paramètres changent. Aucune cryptographie maison (RJ section 1). | Proposé |
+| S-01 | Mots de passe hachés en **Argon2id** par une bibliothèque maintenue (choix au Jour 8). Paramètres alignés sur les recommandations OWASP en vigueur, vérifiées au Jour 8. Rehachage transparent si les paramètres changent. Aucune cryptographie maison. | Proposé |
 | S-02 | Politique de mot de passe : longueur minimale, refus des mots de passe connus comme compromis. Valeurs : Q-76. | À VALIDER |
-| S-03 | **Jeton d'accès** : JWT signé, durée courte (proposition : 15 minutes, Q-76), algorithme fixé côté serveur, `iss`, `aud`, `exp`, `iat`, `sub` (utilisateur), `sid` (session), `jti` vérifiés. Le jeton **ne transporte pas** les rôles ni les permissions : ils sont relus à chaque requête, pour qu'un changement de rôle ou une suspension prenne effet immédiatement. | Proposé |
-| S-04 | **Jeton de rafraîchissement** : valeur aléatoire opaque d'au moins 256 bits, stockée **hachée** en base et rattachée à une session. Rotation à chaque usage. La réutilisation d'un jeton déjà consommé révoque toute la session (détection de vol). Durée : Q-76. | Proposé |
-| S-05 | **Révocation** : déconnexion, changement ou réinitialisation de mot de passe, suspension du compte. La session (`sid`) est vérifiée à chaque requête, pendant la résolution de l'acteur. Un jeton d'accès d'une session révoquée est donc refusé immédiatement. | Proposé |
-| S-06 | **Connexion** : message unique quel que soit le cas (BR-ACC-05) ; temps de réponse comparable (hachage effectué même si le compte n'existe pas) ; limites par adresse IP et par compte ; ralentissement progressif plutôt que blocage définitif, qui permettrait de bloquer le compte d'autrui. | Proposé |
-| S-07 | **Vérification d'email et réinitialisation** : jetons à usage unique, stockés hachés, à durée courte. Réponse identique que l'adresse existe ou non. Les sessions sont révoquées après une réinitialisation (RJ 10, RJ 11). | Proposé |
-| S-08 | **Premier administrateur** : commande en ligne exécutée sur le serveur, jamais une route HTTP (RJ 10). Les administrateurs suivants sont créés par un admin habilité, avec audit. | Retenu |
-| S-09 | **Authentification multifacteur** pour les administrateurs, qui accèdent aux marges et aux données bancaires. Absente du CdC. | À VALIDER (Q-80) |
-| S-10 | Transport des jetons pour le futur frontend web (cookie `HttpOnly`, `Secure`, `SameSite` pour le rafraîchissement, avec protection CSRF ; ou en-tête seul) : à décider avec l'architecture du frontend. L'API accepte `Authorization: Bearer`. | À VALIDER |
+| S-03 | **Jeton d'accès** : JWT signé, durée courte (proposition : 15 minutes, Q-76), algorithme fixé côté serveur. Vérification de `iss`, `aud`, `exp`, `iat`, `sub` (utilisateur), `sid` (session) et `jti`. Le jeton ne transporte **ni rôle ni permission** : ils sont relus à chaque requête, pour qu'un retrait ou une suspension prenne effet immédiatement. | Proposé |
+| S-04 | **Jeton de rafraîchissement** : valeur aléatoire opaque d'au moins 256 bits, stockée **hachée**, rattachée à une session. Rotation à chaque usage. Un jeton déjà consommé qui est réutilisé révoque toute la session (détection de vol). Durée : Q-76. | Proposé |
+| S-05 | **Révocation immédiate** à la déconnexion, au changement ou à la réinitialisation du mot de passe, à la suspension du compte et au retrait d'adhésion. La session (`sid`) est vérifiée à chaque requête. | Proposé |
+| S-06 | **Connexion** : réponse unique (BR-ACC-05), durée comparable (hachage effectué même pour un compte inexistant), limites par IP et par compte, ralentissement progressif plutôt que blocage définitif. | Proposé |
+| S-07 | **Vérification d'email et réinitialisation** : jetons à usage unique, stockés hachés, de courte durée. Réinitialisation suivie d'une révocation des sessions (RJ 10, RJ 11). | Proposé |
+| S-08 | **Premier administrateur** créé par une commande en ligne exécutée sur le serveur, jamais par une route HTTP (RJ 10). | Retenu |
+| S-09 | **Second facteur obligatoire pour les administrateurs**, qui accèdent aux marges, aux données bancaires et aux confirmations de paiement. Facultatif ou obligatoire pour les organisations clientes : à décider. | À VALIDER (Q-80) |
+| S-10 | Transport des jetons pour le futur frontend web (cookie `HttpOnly`, `Secure`, `SameSite` avec protection CSRF, ou en-tête seul) : à décider avec l'architecture du frontend. L'API accepte `Authorization: Bearer`. | À VALIDER |
+| S-35 | **Ré-authentification récente** (mot de passe, et second facteur s'il est actif) exigée pour les actions sensibles : changement d'email ou de mot de passe, modification des coordonnées bancaires, confirmation ou remboursement d'un paiement, gestion des comptes admin, modification des règles de prix. | Proposé |
+| S-56 | **Réponses non énumérantes** pour l'inscription, la réinitialisation et le renvoi de vérification : même réponse, que l'adresse soit déjà connue ou non. La suite se fait par email. L'unicité d'un nom de société ou d'un slug ne doit pas révéler une inscription en attente (F-4). | Proposé |
 
 ## 5. Autorisation
 
-**Acteur** : pour chaque requête authentifiée, `access_control` construit un acteur à partir de la base :
-- utilisateur et état de sa session ;
-- organisation et son type ;
-- statut du compte ;
-- rôles et permissions.
+### 5.1 Politique d'accès
 
-Les services reçoivent cet acteur, jamais le jeton.
-
-| ID | Proposition | Statut |
+| ID | Décision | Statut |
 |---|---|---|
-| S-11 | Permissions nommées `<ressource>:<action>` (par exemple `rfqs:submit`, `payments:confirm`, `verification:decide`, `pricing:configure`, `audit:read`). L'association rôles-permissions est une **donnée** (tables), pas du code. | Proposé |
-| S-12 | Rôles actifs en V1 : Buyer, Exporter, MadaSource Admin. Les permissions admin sont **granulaires** dès la V1, même portées par un seul rôle, pour activer plus tard les rôles Operations, Compliance, Finance et Logistics sans réécriture (CdC §53). | Proposé |
-| S-13 | **Refus par défaut** : toute route est privée sauf déclaration explicite comme publique. Chaque route privée déclare sa permission (`require_permission`). | Proposé |
-| S-14 | **Contrôle d'objet (BOLA)** : tout accès à un objet passe par une requête filtrée par l'acteur : organisation propriétaire, ou **participation** (RFQ adressée, partie au Trade, participant à la conversation). Fonctions de repository `get_for_actor` et `list_for_actor`. Un accès non filtré n'existe que pour les traitements système et l'administration, sous un nom explicite qui le rend visible en revue. | Proposé |
-| S-15 | Objet hors du périmètre de l'acteur : **404**, identique à un objet inexistant (D-25). Code 403 réservé au cas d'une action interdite sur un objet visible. | Proposé |
-| S-16 | **Administration** : accès étendu mais non illimité. Permissions explicites ; chaque action admin est auditée ; aucune modification de l'historique (propositions, TradeEvent, audit), même par un admin ; consultation des données bancaires auditée. Intervention admin dans une négociation : Q-40. | Proposé |
-| S-17 | Sécurité au niveau des lignes de PostgreSQL (Row-Level Security) : défense en profondeur possible, **non retenue en V1** (complexité avec un pool de connexions asynchrone). Le filtrage applicatif S-14 est obligatoire. | Proposé |
+| S-28 | Pour chaque ressource, une **politique d'accès** côté serveur répond, pour un triplet (acteur, action, ressource), soit par une **audience** (section 5.2), soit par un **refus**. Refus par défaut. Elle est évaluée à chaque requête, à partir de l'adhésion, du statut du compte et des rôles **courants**. | Proposé |
+| S-11 | Permissions nommées `<ressource>:<action>`. L'association rôles-permissions est une donnée (tables), pas du code. | Proposé |
+| S-12 | Rôles actifs en V1 : Buyer, Exporter, MadaSource Admin. Permissions admin **regroupées en ensembles distincts** : lecture financière (marges, prix nets), données bancaires, confirmation et remboursement de paiement, règles de prix et de matching, comptes admin, lecture des conversations, journal d'audit. Cela prépare les rôles futurs (CdC §53). Faut-il les séparer entre admins dès la V1 ? Q-89. | Proposé |
+| S-13 | Toute route est privée sauf déclaration explicite comme publique. Chaque route privée déclare sa permission. | Proposé |
+| S-28 | Un acteur **Système** explicite, aux permissions minimales et audité, pour les traitements automatiques : matching, création du Trade, calcul des indicateurs. | Proposé |
 
-## 6. Confidentialité des données
+### 5.2 Audiences : remplacement de la notion de « partie »
 
-### 6.1 Séparation des schémas
+En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource, exportateur. Une seule notion de « partie », où chacun voit ce que voit l'autre, conduit à exposer la marge (constat C-1).
 
-- Un objet est servi par un schéma **par audience** : public, acheteur, exportateur, admin. Ces schémas sont des classes distinctes ; un schéma public ou acheteur n'hérite jamais d'un schéma privé ([api-conventions.md](api-conventions.md#13-openapi)).
-- Sortie : liste de champs autorisés (le schéma), jamais la sérialisation directe d'un modèle ORM.
-- Entrée : `extra="forbid"` ; les champs fixés par le serveur ne sont jamais acceptés du client.
-- Contrôles automatiques : assertion de non-exposition sur les réponses et contrôle statique de l'OpenAPI ([testing-strategy.md](testing-strategy.md#7-non-exposition-des-données-sensibles)).
-
-### 6.2 Protection des composantes de prix (R-01)
-
-| ID | Règle | Statut |
+| ID | Décision | Statut |
 |---|---|---|
-| S-18 | Les composantes internes (prix net, coûts externes, marge, commission) ne sont jamais sérialisées dans un schéma acheteur ou public. La marge n'est jamais sérialisée dans un schéma exportateur (BR-PRC-09). | Retenu (CdC §61, RJ 24) |
-| S-19 | Règle de **non-déduction** : aucune audience ne reçoit une combinaison de valeurs qui permette de recalculer une composante cachée. Un exportateur qui connaît son prix net ne reçoit ni le prix final acheteur ni un total acheteur, faute de quoi la marge se déduit. Cette règle s'applique à la quotation, aux propositions, au Trade, aux documents commerciaux générés, aux notifications, aux agrégats et aux exports. Cas de la négociation : Q-05. | Proposé |
-| S-20 | Aucun tri ni filtre sur un champ invisible pour l'audience ([api-conventions.md](api-conventions.md#6-pagination-tri-et-filtres)). | Proposé |
-| S-21 | Messages d'erreur, journaux applicatifs et notifications ne contiennent aucune composante de prix. Le journal d'audit en contient (anciennes et nouvelles valeurs, CdC §52) et n'est donc lisible que par les admins habilités (`audit:read`). | Proposé |
+| S-29 | Toute lecture est servie pour une **audience explicite** : `public`, `buyer` (organisation acheteuse partie), `exporter_owner` (organisation exportatrice émettrice ou propriétaire), `exporter_recipient` (exportateur destinataire d'une RFQ), `madasource` (admin) et `madasource_finance` (admin habilité aux données financières). La politique d'accès choisit l'audience, jamais le router. P-01 ([module-boundaries.md](module-boundaries.md)) renvoie une audience, pas un booléen. | Proposé |
+| S-30 | **Participation matérialisée** : on n'est participant qu'à travers un enregistrement explicite et actif. Il s'agit du destinataire de RFQ avec son statut, des parties du Trade et des participants d'une conversation. Un destinataire retiré ou suspendu perd l'accès ; un destinataire qui a décliné ne voit plus que ses propres contributions (F-1). | Proposé |
+| S-31 | Dans une RFQ adressée à plusieurs exportateurs, tout objet partagé est rattaché à la **paire (RFQ, exportateur destinataire)** : questions, réponses, documents, conversations. Un exportateur ne voit jamais les échanges d'un concurrent. La diffusion à tous les destinataires n'a lieu que sur une action explicite de l'acheteur (Q-84). | Proposé |
+| S-36 | **Invariant** : l'organisation acheteuse et l'organisation exportatrice d'une RFQ, d'une quotation ou d'un Trade sont toujours différentes, quelle que soit la réponse à Q-09 (F-2). | Proposé |
 
-### 6.3 Données bancaires et fiscales
+### 5.3 Contrôle d'objet (BOLA)
 
-| ID | Règle | Statut |
+| ID | Décision | Statut |
 |---|---|---|
-| S-22 | Informations bancaires de l'exportateur **chiffrées au niveau applicatif** avant stockage, par une bibliothèque cryptographique maintenue. Clé hors de la base (variable d'environnement ou gestionnaire de secrets). Accès réservé à l'organisation propriétaire et aux admins habilités, consultation auditée, affichage masqué par défaut. | Proposé (Q-81) |
-| S-23 | Coordonnées bancaires à présenter à l'acheteur pour un virement (MadaSource ou exportateur) : décision commerciale et juridique. | À VALIDER (Q-55) |
+| S-14 | Tout accès à un objet passe par une requête filtrée par l'acteur (organisation propriétaire ou participation matérialisée), via des fonctions de repository `get_for_actor` et `list_for_actor`. Un accès non filtré n'existe que pour le Système et l'administration, sous un nom explicite. | Proposé |
+| S-14 | **Tout identifiant reçu**, qu'il vienne du chemin, du corps ou des paramètres, passe par la politique d'accès avec l'action précise : lire, rattacher ou partager. Exemples : un document glissé dans un litige, un produit non publié cité dans une RFQ (E-5). | Proposé |
+| S-14 | Les **collections imbriquées** (documents, messages, paiements d'un Trade) sont filtrées élément par élément. Les totaux de pagination portent sur l'ensemble autorisé. | Proposé |
+| S-15 | Objet hors périmètre : **404**, identique à un objet inexistant (D-25). Code 403 réservé à une action interdite sur un objet visible. | Proposé |
+| S-17 | Sécurité au niveau des lignes de PostgreSQL : défense en profondeur possible, **non retenue en V1**. Le filtrage S-14 est obligatoire. | Proposé |
 
-### 6.4 Documents (Jour 29)
+### 5.4 Administration
 
-| ID | Règle | Statut |
+| ID | Décision | Statut |
 |---|---|---|
-| S-24 | Chaque document porte une **visibilité explicite**, en plus de son contexte : organisation propriétaire seule, partie acheteuse, partie exportatrice, MadaSource uniquement. La participation au contexte (P-01) **ne suffit pas**. Exemple : une facture de l'exportateur à MadaSource en Modèle A révèle le prix net et ne doit pas être visible par l'acheteur. | Proposé |
-| S-25 | Formats admis PDF, JPG, PNG, DOCX (CdC §26), vérifiés sur le **contenu réel** (signature de fichier), pas seulement sur l'extension ou le type déclaré. Refus des formats à macros et des archives. Taille maximale et analyse antivirus : Q-48. | Proposé |
-| S-26 | Nom d'origine conservé comme simple métadonnée nettoyée, jamais utilisé comme chemin. Clé de stockage aléatoire. Stockage privé. Téléchargement après autorisation serveur, par URL signée de courte durée (proposition : 5 minutes) ou par flux, avec `Content-Disposition: attachment` et `X-Content-Type-Options: nosniff`. | Proposé |
-| S-27 | Suppression des métadonnées des images (EXIF, dont la géolocalisation) au dépôt. | Proposé |
+| S-16 | Accès admin étendu mais non illimité : permissions explicites (S-12), chaque action auditée, aucune modification de l'historique (propositions, TradeEvent, audit), même par un admin. | Proposé |
+| S-16 | Les **consultations** sensibles sont auditées, comme les modifications : données bancaires, documents privés, conversations, journal d'audit, exports. | Proposé |
+| S-32 | Une intervention admin « pour le compte de » une organisation (Q-40) est marquée comme telle, motivée, auditée et notifiée à l'organisation. **L'usurpation d'identité est interdite.** | Proposé |
+| S-33 | Un administrateur appartient à l'organisation interne MadaSource et n'est **jamais membre d'une organisation cliente** (Q-74). | Proposé |
+| S-34 | **Séparation des tâches sur les paiements** : l'admin qui a saisi un Payment Record ou l'a passé en Processing ne peut pas le confirmer. Même règle pour un remboursement. Une double validation au-delà d'un seuil est possible (Q-88). | Proposé |
+| S-09, S-35 | Second facteur et ré-authentification (section 4). | À VALIDER, Proposé |
+| — | Comptes admin nominatifs, jamais partagés. Création et promotion sous permission dédiée, avec audit et notification aux autres admins (Q-14). Revue périodique des comptes, désactivation au départ. | Proposé |
 
-### 6.5 Messagerie
+## 6. Confidentialité commerciale
 
-- Seuls les participants d'une conversation la lisent et y écrivent (BR-MSG-01). L'accès admin est en attente de décision (Q-50).
-- Le contenu tapé par les utilisateurs (prix, coordonnées) ne peut pas être contrôlé techniquement sans filtrage. Politique d'échange de coordonnées : Q-51.
+### 6.1 Projections et champs modifiables
 
-## 7. Intégrité des transactions
+| ID | Décision | Statut |
+|---|---|---|
+| S-37 | Chaque objet exposé déclare une **projection par audience** : une liste blanche de champs, implémentée par un schéma distinct. La politique d'accès choisit la projection. Les tests vérifient l'**ensemble exact** des clés de chaque projection ([testing-strategy.md](testing-strategy.md)). | Proposé |
+| S-38 | **Liste blanche des champs modifiables** par entité et par audience. Tout champ fixé par le serveur (statut, organisation, marge, niveau de vérification…) est refusé en 422 (constat M-8). | Proposé |
 
-- Transitions d'état uniquement par les services, sous verrou, avec revérification de l'état (D-09, BR-TRD-06).
+### 6.2 Composantes de prix (R-01)
+
+| ID | Décision | Statut |
+|---|---|---|
+| S-18 | Les composantes internes (prix net, coûts externes, marge, commission) ne sont jamais servies à l'audience `public` ni à l'audience `buyer`. La marge n'est jamais servie à une audience exportateur (BR-PRC-09). | Retenu (CdC §61, RJ 24) |
+| S-19 | **Non-déduction** : pour chaque audience, la liste des composantes de prix visibles est **fermée et documentée**. Il faut démontrer qu'elle ne permet pas de recalculer une composante cachée, par recoupement de champs, de prix FOB et CIF, de totaux, de paiements, de remboursements, de prix d'échantillon ou de tableaux de bord. Un champ public est visible de **tous** les exportateurs, y compris pour leurs propres produits (constat E-1). | Proposé |
+| S-39 | En Modèle A, le Trade fige **deux jeux de termes** : les termes acheteur (prix final) et les termes fournisseur (prix net). Chaque audience ne reçoit que les siens. Quels objets du Trade sont partagés et lesquels restent bilatéraux avec MadaSource : Q-82. | Proposé (Q-01, Q-82) |
+| S-40 | Les **Payment Records sont orientés** : acheteur → MadaSource et MadaSource → exportateur en Modèle A ; acheteur → exportateur en Modèle B. Chaque justificatif hérite de l'audience de son paiement (Q-54, Q-82). | Proposé |
+| S-41 | La commission (Modèle B) est visible de **son payeur** seulement, et distincte de la marge (Q-03). | Proposé |
+| S-20 | Filtres et tris permis seulement sur les champs visibles de l'audience ([api-conventions.md](api-conventions.md#6-pagination-tri-et-filtres)). | Proposé |
+| S-42 | **Pas d'oracle** :<br>- aucune décision automatique fondée sur une valeur cachée à la contrepartie (par exemple le rejet automatique d'une contre-offre sous un prix plancher, qui permettrait de trouver ce plancher par essais successifs) ;<br>- messages d'erreur sans montant ni seuil ;<br>- limites de débit sur les actions de négociation. | Proposé |
+| S-21 | Erreurs, journaux applicatifs et notifications ne contiennent aucune composante de prix. Le journal d'audit en contient, sous les conditions de la section 18. | Proposé |
+
+### 6.3 Prix présenté et prix accepté
+
+| ID | Décision | Statut |
+|---|---|---|
+| S-43 | Le prix présenté à l'acheteur est **calculé et stocké** au moment de la présentation, avec la version des règles de prix. Toute modification d'une offre crée une **nouvelle version**. L'acceptation transmet la version vue ; en cas d'écart, la réponse est 409 (`OFFER_VERSION_MISMATCH`). Le Trade copie les valeurs stockées, sans recalcul (constat E-11). Effet d'un changement de règle sur une offre déjà présentée : Q-91. | Proposé |
+
+## 7. Coordonnées bancaires
+
+| ID | Décision | Statut |
+|---|---|---|
+| S-22 | Coordonnées bancaires **chiffrées au niveau applicatif** par une bibliothèque cryptographique maintenue, clé hors de la base. Lecture intégrale réservée à l'organisation propriétaire et à l'ensemble de permissions « données bancaires », sur action explicite et auditée. Affichage masqué par défaut. | Proposé (Q-81) |
+| S-44 | **Modification sous contrôle renforcé** : permission dédiée, ré-authentification (S-35), notification à tous les membres de l'organisation, re-vérification par MadaSource avant prise d'effet, délai de prise d'effet. Le même régime s'applique aux coordonnées bancaires de **MadaSource** dans les paramètres. Modalités : Q-87 (constat E-4). | Proposé |
+| S-23 | Coordonnées à présenter à l'acheteur pour un virement (MadaSource ou exportateur) : décision commerciale et juridique. | À VALIDER (Q-55) |
+
+## 8. Intégrité des transactions
+
+- Transitions uniquement par les services, sous verrou, avec revérification de l'état (D-09).
 - Actions critiques idempotentes, contraintes d'unicité en dernier rempart (D-09).
-- Historique immuable par les opérations normales : propositions, TradeEvent, audit (BR-NEG-02, BR-TRD-07, BR-AUD-02).
-- Le dépôt d'un justificatif ne confirme jamais un paiement (BR-PAY-03).
+- Version de l'offre acceptée (S-43).
+- Séparation des tâches sur les paiements (S-34).
+- Historique immuable par les opérations normales (BR-NEG-02, BR-TRD-07, BR-AUD-02).
+- Un justificatif ne confirme jamais un paiement (BR-PAY-03).
 
-## 8. Validation des entrées et injections
+## 9. Documents (Jour 29)
+
+| ID | Décision | Statut |
+|---|---|---|
+| S-24 | Chaque document **et chaque version** porte une **audience explicite**, vérifiée en plus de l'accès au contexte. La participation au contexte ne suffit pas. Valeur par défaut : la plus restrictive (organisation déposante et MadaSource). Exemple : une facture de l'exportateur à MadaSource en Modèle A révèle le prix net et ne doit jamais être servie à l'acheteur. | Proposé |
+| S-24 | Catégories **jamais publiques** : documents de société, de paiement, fiscaux, bancaires, et documents d'onboarding exportateur (ces derniers ne sont jamais partagés, constat F-5). Qui fixe l'audience, valeurs par défaut par catégorie, validation admin avant partage : Q-83. | Proposé |
+| S-24 | Le retrait d'un partage est possible sans suppression, et audité. Les listes de documents sont filtrées par audience, avec des noms affichés nettoyés : l'existence d'un document invisible n'est jamais révélée. Un document généré par la plateforme (quotation, facture, récapitulatif) est rendu **pour chaque audience**. | Proposé |
+| S-45 | Rattacher un document à un message, un litige, un TradeEvent ou un paiement exige le **droit de le partager** avec l'audience cible. | Proposé |
+| S-25 | Formats admis PDF, JPG, PNG, DOCX (CdC §26), vérifiés sur le contenu réel. Refus des formats à macros et des archives. Taille maximale et analyse antivirus : Q-48. | Proposé |
+| S-26 | Clé de stockage aléatoire, sans nom de fichier ni organisation. Stockage privé. URL signée courte, propre à un objet, **jamais journalisée ni placée dans une notification**. Contrôle d'accès à chaque téléchargement pour les documents bancaires et d'immatriculation. `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`. | Proposé |
+| S-27 | **Métadonnées embarquées** : suppression des métadonnées des images (EXIF, dont la géolocalisation) au dépôt. Politique pour les métadonnées des documents bureautiques (auteur, société, suivi des modifications) : Q-83. | Proposé |
+
+## 10. Messagerie et textes libres
+
+| ID | Décision | Statut |
+|---|---|---|
+| S-46 | Une conversation = un contexte + une **liste explicite de participants**. Dans une RFQ, une conversation par paire acheteur–exportateur (S-31). Les questions des exportateurs sont privées par défaut (Q-84). L'accès suit l'évolution de la participation (S-30). | Proposé |
+| S-46 | Lecture des conversations par l'admin : Q-50. Si elle est permise, elle est motivée, auditée et signalée aux participants. Les messages d'un admin sont signés « MadaSource ». | À VALIDER |
+| S-47 | **Tout texte libre porte une audience** : commentaires de TradeEvent, notes d'exception et de litige, motif de rejet de vérification. Pour un texte saisi par un admin, l'audience par défaut est « interne ». Le motif de rejet communiqué à l'exportateur est un champ distinct de la note interne (constat M-5). | Proposé |
+| — | Le texte saisi par les utilisateurs (prix, coordonnées) ne peut pas être contrôlé techniquement sans filtrage. Politique : Q-51 (R-05). | À VALIDER |
+
+## 11. Autres projections sensibles
+
+| ID | Décision | Statut |
+|---|---|---|
+| S-48 | **Identité de l'acteur** dans les historiques et les documents, rendue selon l'audience :<br>- libellé d'organisation selon Q-27 ;<br>- nom d'un utilisateur visible seulement au sein de sa propre organisation ;<br>- « MadaSource » pour un admin ;<br>- jamais d'email (constat M-6). | Proposé |
+| S-49 | Les **raisons du matching** sont produites dans la projection du lecteur : critère satisfait ou non, jamais la valeur privée d'un tiers, comme « capacité : 12 t » montrée à l'acheteur. Visibilité : Q-31 (constat M-4). | Proposé |
+| S-50 | **Projection de la RFQ pour l'exportateur destinataire** : liste fermée de champs (prix cible, préférence de paiement, port, exigences…). Q-85 (constat M-3). | Proposé |
+| S-51 | **Profil public exportateur** en liste blanche. Le CdC §61 ne rend publics que le nom, les produits, la vérification, la localisation générale et les certifications. Pour le reste du §7 (capacité, taux de litige…) et pour un seuil d'activité minimal avant d'afficher un indicateur (sur un seul Trade, « 100 % de litiges » révèle un fait privé) : Q-86 (constat M-2). | Proposé |
+
+## 12. Notifications
+
+| ID | Décision | Statut |
+|---|---|---|
+| S-52 | Une notification ne stocke que son type, la référence de l'objet et son destinataire. Son contenu est **rendu à la lecture**, avec la projection et les droits **courants** du lecteur : jamais de montant figé, jamais d'URL signée. Un utilisateur retiré d'une organisation ne relit pas les anciennes notifications de celle-ci (constat M-10). | Proposé |
+
+## 13. Vérification, Passport et références
+
+| ID | Décision | Statut |
+|---|---|---|
+| S-53 | Les champs couverts par une vérification (raison sociale, immatriculation…) sont gelés, ou bien leur modification renvoie la vérification en revue, avec badge suspendu (Q-90, constat M-11). | Proposé |
+| S-54 | Un slug de Passport n'est **jamais réattribué** : des QR codes imprimés y pointent. Une référence lisible (`MST-…`) n'est jamais une clé d'accès sans contrôle. Les références séquentielles révèlent le volume d'activité : à faire accepter ou non (Q-37) (constat F-3). | Proposé |
+
+## 14. Validation des entrées et injections
 
 | Règle | Statut |
 |---|---|
-| Schémas Pydantic typés et bornés (longueurs, valeurs positives, énumérations) ; montants et quantités en chaînes décimales ([api-conventions.md](api-conventions.md#7-dates-montants-quantités)). | Proposé |
-| SQL uniquement par requêtes paramétrées (SQLAlchemy). Colonnes de tri choisies dans une liste blanche, jamais interpolées. | Proposé |
-| Texte libre (descriptions, messages) stocké en texte brut, sans HTML. L'échappement à l'affichage revient au frontend, contre le XSS stocké. | Proposé |
-| `X-Request-ID` reçu : format et longueur validés avant journalisation (injection dans les journaux). | Proposé |
-| Aucune requête sortante vers une URL fournie par un utilisateur (SSRF). Le QR code du Passport est produit côté serveur, à partir de l'URL publique connue. | Proposé |
+| Schémas Pydantic typés et bornés ; montants et quantités en chaînes décimales ([api-conventions.md](api-conventions.md#7-dates-montants-quantités)). | Proposé |
+| SQL uniquement paramétré (SQLAlchemy) ; colonnes de tri choisies dans une liste blanche. | Proposé |
+| Texte libre stocké en texte brut, sans HTML. L'échappement revient au frontend (XSS stocké). | Proposé |
+| `X-Request-ID` reçu : format et longueur validés avant journalisation. | Proposé |
+| Aucune requête sortante vers une URL fournie par un utilisateur (SSRF). Le QR code est produit à partir de l'URL publique connue. | Proposé |
 
-## 9. Limites de débit et consommation de ressources
+## 15. Limites, quotas et abus
+
+| ID | Décision | Statut |
+|---|---|---|
+| — | Limites de débit sur : connexion, rafraîchissement, inscription, réinitialisation, renvoi de vérification, création de RFQ, propositions de négociation, messages, dépôts, recherche publique (CdC §60). Clés : IP et compte pour la connexion ; utilisateur ailleurs. | Proposé |
+| — | Emplacement : reverse proxy (limites grossières) et application (limites fines). Avec plusieurs instances, un stockage partagé (Redis) est nécessaire et doit être justifié au Jour 8. | À VALIDER (Jour 8) |
+| S-55 | **Quotas métier** par organisation et par statut de compte (Q-11) : nombre de RFQ, plafond de destinataires par RFQ (Q-30). Les RFQ jugées abusives sont exclues des indicateurs de performance des exportateurs (constat M-13). | Proposé |
+| — | Pagination bornée, taille maximale des requêtes, délai d'exécution maximal des requêtes SQL, 429 avec `Retry-After`. | Proposé |
+
+## 16. Transport, en-têtes et configuration
 
 | Règle | Statut |
 |---|---|
-| Limites sur : connexion, rafraîchissement, inscription, réinitialisation, renvoi de vérification d'email, création de RFQ, dépôt de documents, recherche publique (CdC §60). | Proposé |
-| Clés de limitation : adresse IP et compte pour la connexion ; utilisateur pour les endpoints authentifiés. | Proposé |
-| Emplacement : reverse proxy (limites grossières) et application (limites fines). Avec plusieurs instances, un stockage partagé (Redis) est nécessaire et doit être justifié au Jour 8. | À VALIDER (Jour 8) |
-| Pagination bornée, taille maximale des requêtes, délai d'exécution maximal des requêtes SQL, réponse 429 avec `Retry-After`. | Proposé |
-
-## 10. Transport, en-têtes et configuration
-
-| Règle | Statut |
-|---|---|
-| HTTPS obligatoire en production (terminaison au reverse proxy), HSTS. | Proposé |
+| HTTPS obligatoire en production, HSTS. | Proposé |
 | CORS : liste blanche des origines du frontend, jamais `*` en production (D-11). | Proposé |
-| En-têtes : `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` sur toute réponse privée. Aucune bannière de version serveur. | Proposé |
-| Documentation interactive et schéma OpenAPI **désactivés en production publique** ; disponibles en local, en test et en staging. | Proposé |
+| En-têtes `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` sur toute réponse privée ; aucune bannière de version. | Proposé |
+| Documentation interactive et schéma OpenAPI **désactivés en production publique**. Les routes admin n'apparaissent dans aucun schéma public (constat F-6). | Proposé |
 | Démarrage refusé en production en cas de configuration dangereuse (D-11). | Proposé |
 
-## 11. Secrets
+## 17. Secrets et hygiène du dépôt
 
 | Règle | Statut |
 |---|---|
 | Secrets uniquement dans les variables d'environnement ou le gestionnaire de secrets de l'hébergeur (Q-79). Jamais dans Git, une image Docker, un journal ou la configuration CI en clair. | Retenu (RJ section 1) |
-| `.env` en local seulement. **Aucun `.gitignore` aujourd'hui** (R-20) : il est à créer au Jour 4, avant tout `.env`. | Retenu |
-| Procédure de rotation documentée (Audit D). Une rotation de la clé de signature invalide les jetons en cours (acceptable). La rotation de la clé de chiffrement bancaire impose un rechiffrement (Q-81). | Proposé |
-| Détection de secrets : hook local (`guard_files.py`) et analyse en CI (outil à justifier au Jour 7). | Proposé |
+| **Aucun `.gitignore` aujourd'hui**, alors que le dépôt est poussé sur GitHub (R-20) : à créer avant tout `.env`, au plus tard au Jour 4. | Retenu |
+| Le cahier des charges est versionné et poussé sur le dépôt distant (commit c6e27d8). Vérifier que ce dépôt est **privé** (R-26, Q-71). Retirer le document de l'historique serait une opération destructive : seulement avec l'accord explicite de l'utilisateur, et sans effet sur les clones existants. | À VALIDER |
+| Procédure de rotation documentée (Audit D). Une rotation de la clé de signature invalide les jetons en cours ; la rotation de la clé de chiffrement bancaire impose un rechiffrement (Q-81). | Proposé |
+| Détection de secrets : hook local (`guard_files.py`) et analyse en CI (outil à justifier au Jour 7). Contrôle CI : aucun `.env` suivi. | Proposé |
 
-## 12. Journalisation et audit
-
-| Règle | Statut |
-|---|---|
-| Journaux applicatifs nettoyés (D-12), avec identifiants plutôt que noms ou emails. | Proposé |
-| Audit des actions sensibles : connexion et échec répété, changement ou réinitialisation de mot de passe, changement de rôle ou de statut, décision de vérification, consultation des données bancaires, téléchargement de document sensible, action admin, accès refusé à un objet d'une autre organisation. Chaque événement enregistre : acteur, organisation, action, objet, horodatage, résultat, anciennes et nouvelles valeurs filtrées (RJ 12, CdC §52). | Proposé |
-| Ajout seul : aucun endpoint ne modifie ni ne supprime un événement. Défense en profondeur proposée : le rôle de base de données de l'application n'a pas les droits `UPDATE` et `DELETE` sur la table d'audit (Jour 12). | Proposé |
-| Données personnelles dans l'audit réduites aux identifiants (pseudonymisation), pour concilier immuabilité et droit à l'effacement (Q-68). | Proposé |
-
-## 13. Base de données
+## 18. Journalisation et audit
 
 | Règle | Statut |
 |---|---|
-| Deux rôles PostgreSQL : un pour les migrations (DDL), un pour l'application (DML sans DDL). | Proposé (Jours 4, 6) |
-| Base jamais exposée publiquement ; connexion chiffrée en production. | Proposé |
-| Sauvegardes chiffrées et restauration testée (Audit D). | Proposé |
-| Aucun outil ni agent connecté à une base de production (règle de préparation). | Retenu |
+| Journaux applicatifs nettoyés (D-12) : en plus des secrets, ni prix net, ni marge, ni coût, ni commission. Identifiants plutôt que noms ou emails. | Proposé |
+| **Audit métier** (RJ 12, CdC §52) et **événements de sécurité** : échecs de connexion, réinitialisations, refus d'accès inter-organisations (tentatives BOLA), téléchargements sensibles, consultations de données bancaires, lectures admin de conversations, exports, changements de permissions et de feature flags. | Proposé |
+| Les anciennes et nouvelles valeurs sont stockées **selon la classification des champs** (Jour 3) : en clair, masquées (coordonnées bancaires) ou réservées à l'ensemble de permissions « lecture financière » (composantes de prix). La consultation du journal d'audit est elle-même auditée. | Proposé |
+| Ajout seul. Le rôle de base de données de l'application n'a pas les droits `UPDATE` et `DELETE` sur la table d'audit (Jour 12). Garantie d'intégrité supplémentaire (chaînage) : à évaluer. Conservation : Q-69. | Proposé |
+| Données personnelles dans l'audit réduites aux identifiants, pour concilier immuabilité et droit à l'effacement (Q-68). | Proposé |
 
-## 14. Mode DEMO
+## 19. Base de données
 
-Instance distincte, avec sa propre base et son propre stockage, sans connexion aux intégrations réelles. En-tête `X-MadaSource-Mode: demo`. Démarrage refusé en production avec `DEMO_MODE` (D-18, BR-DEMO-02).
-
-## 15. Dépendances
-
-- Versions épinglées et fichier de verrouillage (Jour 4).
-- Analyse des vulnérabilités connues en CI (outil à justifier au Jour 7).
-- Images Docker de base épinglées, exécution sans root (agent `devops-engineer`).
-- Aucun ajout de skill, plugin ou serveur MCP externe sans accord.
-
-## 16. Tests de sécurité
-
-- Matrice obligatoire par endpoint privé et contrôles de non-exposition ([testing-strategy.md](testing-strategy.md#6-tests-obligatoires)).
-- Authentification : jeton expiré, révoqué, falsifié, d'une session révoquée ; rafraîchissement rejoué (détection de vol) ; réponses de connexion indiscernables.
-- Fichiers : type réel différent de l'extension, taille excessive, nom de fichier hostile.
-- Audit B : accès horizontaux, élévation de privilèges, fuites, concurrence de l'acceptation.
-
-## 17. Registre des décisions de sécurité
-
-Les décisions S-01 à S-27 figurent dans les tableaux ci-dessus, avec leur statut. Synthèse des points à valider :
-
-| Sujet | Question |
+| Règle | Statut |
 |---|---|
-| Durées des jetons, politique de mot de passe, verrouillage | Q-76 |
-| Authentification multifacteur des administrateurs | Q-80 |
-| Chiffrement des données bancaires et gestion des clés | Q-81 |
-| Hébergement, gestionnaire de secrets, localisation des données | Q-79 |
-| Taille maximale et antivirus des fichiers | Q-48 |
-| Lecture des conversations par l'admin ; échange de coordonnées | Q-50, Q-51 |
-| Négociation en Modèle A (non-déduction de la marge) | Q-05 |
-| Coordonnées bancaires présentées à l'acheteur | Q-55 |
-| Données personnelles et conservation | Q-68, Q-69 |
+| Deux rôles PostgreSQL : migrations (DDL) et application (DML sans DDL). | Proposé (Jours 4, 6) |
+| Base jamais exposée publiquement ; connexion chiffrée en production ; sauvegardes chiffrées et restauration testée (Audit D). | Proposé |
+| Aucun outil ni agent connecté à une base de production. | Retenu |
 
-## 18. Relecture de sécurité du Jour 2
+## 20. Mode DEMO
 
-_À compléter avec les constats de l'agent `security-auditor` sur la matrice de visibilité du Jour 1._
+| ID | Décision | Statut |
+|---|---|---|
+| D-18 | Instance distincte, avec sa propre base, son propre stockage et ses propres secrets ; démarrage refusé en production avec `DEMO_MODE` ([architecture.md](architecture.md#82-mode-demo-cdc-68)). | Proposé (Q-67) |
+| S-57 | Compléments, contre l'usage d'une capture d'écran DEMO comme preuve de paiement (constat E-10) :<br>- **espace de noms distinct** pour les identifiants lisibles (préfixe propre au DEMO) ;<br>- marqueur `demo` dans **chaque corps de réponse, notification et document généré** (l'en-tête seul ne se voit pas sur une capture) ;<br>- emails désactivés, ou limités à une liste blanche ;<br>- accès sur invitation, aucune donnée réelle ;<br>- adaptateurs de démonstration non chargeables hors de l'environnement `demo` (garde au démarrage). | Proposé |
+
+## 21. Tests de sécurité
+
+En plus de la matrice obligatoire et des contrôles de non-exposition de [testing-strategy.md](testing-strategy.md), la relecture du Jour 2 demande notamment :
+
+| Test | Contrôle |
+|---|---|
+| `test_model_a_no_buyer_price_in_any_exporter_response` et son symétrique | C-1, S-19, S-39 |
+| `test_margin_not_derivable_per_audience`, `test_exporter_public_view_equals_visitor_view` | E-1, S-19 |
+| `test_exporter_b_cannot_read_exporter_a_rfq_question_or_document` | E-2, S-31 |
+| `test_trade_document_list_hides_non_visible_items`, `test_superseded_version_keeps_own_audience`, `test_company_document_cannot_be_public` | E-3, S-24 |
+| `test_bank_details_change_requires_reauth_and_notifies` | E-4, S-44 |
+| `test_attach_foreign_document_returns_404`, `test_nested_trade_collections_filtered` | E-5, S-14, S-45 |
+| `test_admin_without_finance_permission_gets_no_margin`, `test_admin_cannot_join_customer_org` | E-6, S-12, S-33 |
+| `test_same_admin_cannot_record_and_confirm_payment` | E-7, S-34 |
+| `test_public_filter_on_hidden_price_rejected`, `test_counteroffer_error_contains_no_amount` | E-9, S-20, S-42 |
+| `test_demo_references_distinct_prefix`, `test_demo_payload_flagged` | E-10, S-57 |
+| `test_accept_stale_version_returns_409` | E-11, S-43 |
+| `test_notification_rendered_with_reader_projection` | M-10, S-52 |
+| `test_org_cannot_quote_on_own_rfq` | F-2, S-36 |
+| `test_register_existing_email_same_response` | F-4, S-56 |
+
+## 22. Relecture de sécurité du Jour 2
+
+Relecture par l'agent `security-auditor`, en lecture seule, de la matrice de visibilité du Jour 1 et des premiers brouillons du Jour 2. Résultat : **1 constat critique, 11 élevés, 14 moyens, 6 faibles**. Tous sont traités par une décision de ce document, une question ouverte, ou les deux. Aucun n'est ignoré.
+
+| Constat | Gravité | Traitement |
+|---|---|---|
+| C-1 Notion de « partie » bilatérale en Modèle A trilatéral | Critique | S-29, S-39, S-40 ; P-01 renvoie une audience ; matrice du Jour 1 corrigée ; Q-82 |
+| E-1 Marge recalculable par recoupement | Élevée | S-19 ; Q-02, Q-04, Q-05, Q-06 précisées |
+| E-2 Fuite entre exportateurs concurrents d'une RFQ | Élevée | S-31, S-46 ; Q-84 |
+| E-3 Documents : audience, versions, noms, métadonnées | Élevée | S-24, S-26, S-27, S-45 ; Q-83 |
+| E-4 Modification des coordonnées bancaires | Élevée | S-35, S-44 ; Q-87 |
+| E-5 BOLA par identifiant dans le corps ou par collection imbriquée | Élevée | S-14 |
+| E-6 Admin unique, sans second facteur ni audit des consultations | Élevée | S-09, S-12, S-16, S-32, S-33, S-35 ; Q-80, Q-89 |
+| E-7 Confirmation de paiement par un seul admin | Élevée | S-34 ; Q-88 |
+| E-8 Lecture directe des tables par `marketplace` et `admin` | Élevée | Projections publiées par le module propriétaire ([module-boundaries.md](module-boundaries.md)) |
+| E-9 Oracles : filtres, rejets automatiques, erreurs | Élevée | S-20, S-42 ; [error-handling.md](error-handling.md) |
+| E-10 Mode DEMO marqué seulement par un en-tête | Élevée | S-57 |
+| E-11 Prix présenté différent du prix accepté | Élevée | S-43 ; Q-91 |
+| M-1 Objets sans ligne dans la matrice de visibilité | Moyenne | Lignes ajoutées dans [actors-and-permissions.md](actors-and-permissions.md) ; Q-92 (litiges) |
+| M-2 Profil public déduit au lieu d'une liste blanche | Moyenne | S-51 ; Q-86 |
+| M-3 Champs de la RFQ visibles par l'exportateur | Moyenne | S-50 ; Q-85 |
+| M-4 Contenu des raisons du matching | Moyenne | S-49 |
+| M-5 Annotations internes et partagées confondues | Moyenne | S-47 |
+| M-6 Identité révélée par les champs « acteur » | Moyenne | S-48 |
+| M-7 Audit : valeurs sensibles, événements de sécurité | Moyenne | Section 18 |
+| M-8 Pas de liste blanche des champs modifiables | Moyenne | S-38 |
+| M-9 Actions sensibles absentes de la matrice | Moyenne | Lignes ajoutées dans [actors-and-permissions.md](actors-and-permissions.md) ; S-32, S-35 |
+| M-10 Notifications construites une fois puis diffusées | Moyenne | S-52 |
+| M-11 Champs vérifiés modifiables | Moyenne | S-53 ; Q-90 |
+| M-12 Commission confondue avec la marge | Moyenne | S-41 |
+| M-13 Flux métier sans quotas | Moyenne | S-55 |
+| M-14 CdC poussé sur le dépôt distant, pas de `.gitignore` | Moyenne | Section 17 ; R-20 et R-26 mis à jour ; signalé à l'utilisateur |
+| F-1 Destinataire « autorisé à répondre » non défini | Faible | S-30 |
+| F-2 Même organisation des deux côtés | Faible | S-36 |
+| F-3 Références séquentielles, slugs réattribuables | Faible | S-54 |
+| F-4 Énumération de comptes hors connexion | Faible | S-56 |
+| F-5 « Documents d'export » recouvre deux notions | Faible | S-24 |
+| F-6 Exposition d'OpenAPI en production | Faible | Section 16 |
+
+Risques résiduels relevés par l'audit, sans solution technique complète :
+- prix ou coordonnées écrits dans un texte libre (R-05, Q-51) ;
+- documents physiques accompagnant la marchandise, qui peuvent révéler le prix net hors plateforme (CdC §75, R-04, Q-01) ;
+- futur assistant IA (CdC §45), dont les explications devront rester dans la projection acheteur ;
+- tension entre droit à l'effacement et audit immuable (R-14) ;
+- risque interne admin, réduit mais jamais nul.

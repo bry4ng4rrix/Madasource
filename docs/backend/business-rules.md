@@ -1,6 +1,6 @@
 # Règles métier — backend MadaSource
 
-Jour 1 · 2026-10-12 · Statut : brouillon à valider par le client
+Jour 1 · 2026-10-12 · Statut : brouillon à valider par le client · **Mis à jour au Jour 2** : règles ajoutées après la relecture de sécurité, marquées « (J2) », toutes au statut Proposé ou À VALIDER
 
 Les règles ci-dessous sont des **invariants** que le backend doit garantir côté serveur, quel que soit le client.
 - **Défini** : écrit dans une source.
@@ -17,6 +17,7 @@ Les exemples chiffrés du CdC (USD 40/kg, marge de USD 3,30, validité de 7 jour
 | BR-ORG-02 | Un utilisateur n'accède qu'aux ressources de son organisation ou à celles dont elle est partie prenante. | CdC §54, RJ 9 | Défini |
 | BR-ORG-03 | Les permissions sont fondées sur les rôles. Aucune décision d'accès ne repose sur un indicateur isolé du type « est admin » dispersé dans le code. | CdC §53, RJ 9 | Défini |
 | BR-ORG-04 | Les rôles futurs restent inactifs sans décision explicite de MadaSource. | CdC §53 | Défini |
+| BR-ORG-05 | (J2) L'organisation acheteuse et l'organisation exportatrice d'une RFQ, d'une quotation ou d'un Trade sont toujours différentes. | S-36 | Proposé |
 
 ## 2. Comptes
 
@@ -28,6 +29,7 @@ Les exemples chiffrés du CdC (USD 40/kg, marge de USD 3,30, validité de 7 jour
 | BR-ACC-04 | Statuts du compte exportateur, distincts des statuts de vérification. | — | À VALIDER (Q-12) |
 | BR-ACC-05 | Les erreurs de connexion ne révèlent pas l'existence d'un compte. Les tokens ne sont jamais journalisés. | RJ 10 | Défini |
 | BR-ACC-06 | Le jeton de vérification d'email est à usage unique, expire, et ne peut être réutilisé. | RJ 11 | Défini |
+| BR-ACC-07 | (J2) Inscription, réinitialisation et renvoi de vérification répondent de la même façon, que l'adresse soit connue ou non. | S-56 | Proposé |
 
 ## 3. Vérification des exportateurs
 
@@ -39,6 +41,7 @@ Les exemples chiffrés du CdC (USD 40/kg, marge de USD 3,30, validité de 7 jour
 | BR-VER-04 | Une vérification dont la date d'expiration est dépassée passe en Expired et n'est plus présentée comme valide. | CdC §8 (statut Expired) | Déduit (détection automatique : Q-15) |
 | BR-VER-05 | Les badges et le Digital Passport n'affichent que des vérifications réellement prononcées. Aucune certification ni vérification n'est supposée. | CdC §46 (énoncé pour l'IA), RJ 22 (énoncé pour le matching) | Déduit |
 | BR-VER-06 | Critères et documents par niveau, durée de validité, niveau minimal pour le Passport, le marketplace et la réception de RFQ. | Planning §13 | À VALIDER (Q-15, Q-16) |
+| BR-VER-07 | (J2) La modification d'un champ couvert par une vérification (raison sociale, immatriculation…) est interdite, ou renvoie la vérification en revue avec badge suspendu. Un slug de Passport n'est jamais réattribué. | S-53, S-54 | À VALIDER (Q-90) |
 
 ## 4. Produits et marketplace
 
@@ -64,6 +67,8 @@ Les exemples chiffrés du CdC (USD 40/kg, marge de USD 3,30, validité de 7 jour
 | BR-RFQ-05 | Les réponses, refus et questions des exportateurs sont conservés. | RJ 21 | Défini |
 | BR-RFQ-06 | La quantité est stockée avec son unité d'origine. Toute normalisation (ex. 20 tonnes = 20 000 kg) est explicite et réversible. | CdC §13 (exemple) | Déduit (Q-21) |
 | BR-RFQ-07 | Le prix cible est facultatif, exprimé en Decimal avec devise. | CdC §12, RJ 19 | Défini (caractère facultatif : RJ 19) |
+| BR-RFQ-08 | (J2) L'accès d'un exportateur à une RFQ passe uniquement par un destinataire matérialisé et actif. Un destinataire retiré ou suspendu perd l'accès ; un destinataire qui a décliné ne voit que ses propres contributions. | S-30 | Proposé |
+| BR-RFQ-09 | (J2) Dans une RFQ adressée à plusieurs exportateurs, chaque question, réponse, document et conversation est rattaché à la paire (RFQ, exportateur). Une diffusion à tous les destinataires n'a lieu que sur action explicite de l'acheteur. L'exportateur destinataire reçoit une projection fermée de la RFQ. | S-31, S-50 | À VALIDER (Q-84, Q-85) |
 
 ## 6. Matching
 
@@ -87,6 +92,7 @@ Les exemples chiffrés du CdC (USD 40/kg, marge de USD 3,30, validité de 7 jour
 | BR-QUO-05 | Une quotation expirée ne peut pas être acceptée, sauf règle explicite et action auditée. | RJ 25 | Défini (règle : Q-36) |
 | BR-QUO-06 | Cycle de vie de la quotation (brouillon, soumise, retirée, acceptée, refusée…). | — | À VALIDER (Q-34) |
 | BR-QUO-07 | Les Incoterms admis en V1 sont FOB, CFR et CIF. La liste est extensible sans modification de structure. | CdC §32 | Défini |
+| BR-QUO-08 | (J2) Le prix présenté à l'acheteur est stocké avec la version des règles de prix. Toute modification d'une offre crée une nouvelle version. L'acceptation porte sur la version vue ; en cas d'écart, elle est refusée. | S-43 | Proposé (effet d'un changement de règle : Q-91) |
 
 ## 8. Prix et modèles commerciaux
 
@@ -102,6 +108,8 @@ Les exemples chiffrés du CdC (USD 40/kg, marge de USD 3,30, validité de 7 jour
 | BR-PRC-08 | Un coût externe expiré n'est jamais utilisé silencieusement. Le calcul est bloqué, ou le prix est explicitement signalé comme fondé sur une donnée périmée. | CdC §33 | Défini (comportement exact : Q-04) |
 | BR-PRC-09 | Le prix net fournisseur, les coûts internes et la marge ne sont jamais exposés à l'acheteur. La marge n'est jamais exposée à l'exportateur. | CdC §61, RJ 24 | Défini |
 | BR-PRC-10 | Montants en Decimal/NUMERIC, jamais en float. Règles d'arrondi explicites. | RJ section 1 | Défini (précision : Q-08) |
+| BR-PRC-11 | (J2) **Non-déduction** : aucune audience ne reçoit une combinaison de valeurs permettant de recalculer une composante cachée. Exemple : l'exportateur, qui connaît son prix net, ne reçoit pas le prix final acheteur. Cela vaut aussi pour les totaux, paiements, remboursements, échantillons et tableaux de bord. Un champ public est visible de tous les exportateurs. | S-19 | Proposé |
+| BR-PRC-12 | (J2) La commission du Modèle B est visible de son seul payeur et distincte de la marge. Aucune décision automatique ne repose sur une valeur cachée à la contrepartie (par exemple un prix plancher). Les messages d'erreur ne contiennent ni montant ni seuil. | S-41, S-42 | Proposé (Q-03) |
 
 ## 9. Négociation
 
@@ -123,7 +131,7 @@ Les exemples chiffrés du CdC (USD 40/kg, marge de USD 3,30, validité de 7 jour
 | BR-TRD-02 | Création atomique : Trade, figement des termes, événement initial et changement de statut de la RFQ réussissent ou échouent ensemble. | RJ 27 | Défini (atomicité de la création, RJ 27) / Déduit (statut de la RFQ inclus) |
 | BR-TRD-03 | Idempotence : un double appel ou des requêtes simultanées ne créent jamais deux Trades pour la même acceptation. | RJ 27 | Défini |
 | BR-TRD-04 | Le Trade ID est unique, stable (jamais réattribué ni modifié), lisible, généré par le serveur. | CdC §22, RJ 27 | Défini (format : Q-37) |
-| BR-TRD-05 | Les termes commerciaux acceptés (prix, devise, quantité, qualité, Incoterm, destination, conditions de paiement, livraison cible) sont copiés dans le Trade et ne changent plus, ni avec la quotation, ni avec un taux de change. | RJ 27, CdC §59 | Défini |
+| BR-TRD-05 | Les termes commerciaux acceptés (prix, devise, quantité, qualité, Incoterm, destination, conditions de paiement, livraison cible) sont copiés dans le Trade et ne changent plus, ni avec la quotation, ni avec un taux de change. (J2) En Modèle A, deux jeux de termes sont figés : termes acheteur (prix final) et termes fournisseur (prix net). Chaque partie ne reçoit que les siens. | RJ 27, CdC §59 ; S-39 | Défini / Proposé (deux jeux de termes, Q-82) |
 | BR-TRD-06 | Le statut du Trade suit la machine d'état de [workflows.md §8](workflows.md#8-trade). Toute transition est validée par un service métier et produit un TradeEvent. | CdC §24, RJ 28 | Défini |
 | BR-TRD-07 | Un TradeEvent conserve : horodatage UTC, acteur, action, ancien et nouveau statut, commentaire, document justificatif le cas échéant, métadonnées non sensibles. Il est immuable. | CdC §25, RJ 28 | Défini |
 | BR-TRD-08 | Les objets rattachés au Trade (documents, messages, paiements, expéditions) référencent son Trade ID. | CdC §66 | Défini |
@@ -138,6 +146,7 @@ Les exemples chiffrés du CdC (USD 40/kg, marge de USD 3,30, validité de 7 jour
 | BR-DOC-03 | Un document sensible n'est jamais accessible publiquement. Le téléchargement privé exige une autorisation serveur ou une URL signée à durée limitée. | CdC §11, §60, RJ 29 | Défini |
 | BR-DOC-04 | Un nouveau dépôt du même document crée une nouvelle version. Les versions précédentes sont conservées. | CdC §26 (« version ») | Déduit |
 | BR-DOC-05 | Statuts de document, documents obligatoires par étape, taille maximale, analyse antivirus, conservation. | — | À VALIDER (Q-47, Q-48) |
+| BR-DOC-06 | (J2) Chaque document et chaque version porte une audience explicite. Par défaut, c'est la plus restrictive : organisation déposante et MadaSource. La participation au contexte ne suffit pas pour y accéder. Les documents de société, de paiement, fiscaux, bancaires et d'onboarding ne sont jamais publics. Le retrait d'un partage est audité, sans suppression. | S-24 | Proposé (gouvernance : Q-83) |
 
 ## 12. Messagerie et notifications
 
@@ -146,8 +155,10 @@ Les exemples chiffrés du CdC (USD 40/kg, marge de USD 3,30, validité de 7 jour
 | BR-MSG-01 | Seuls les participants autorisés d'une conversation la lisent et y écrivent. | CdC §28, RJ 30 | Défini |
 | BR-MSG-02 | L'historique des conversations est préservé. Un message n'est pas supprimé par le workflow normal. | CdC §28 | Défini (édition et suppression par l'auteur : Q-50) |
 | BR-MSG-03 | Les pièces jointes passent par le coffre documentaire et ses contrôles. | RJ 30 | Défini |
+| BR-MSG-04 | (J2) Une conversation a une liste explicite de participants ; l'accès suit l'évolution de la participation. Tout texte libre (commentaire, note, motif) porte une audience ; pour un texte saisi par un admin, elle est « interne » par défaut. | S-46, S-47 | Proposé |
 | BR-NOT-01 | Une notification est générée pour chaque événement listé au CdC §29. | CdC §29 | Défini (destinataires : Q-52) |
 | BR-NOT-02 | Le système n'affirme jamais qu'un email ou un push a été envoyé sans confirmation du fournisseur. | RJ 11, RJ 31 | Défini |
+| BR-NOT-03 | (J2) Une notification ne stocke que son type, la référence de l'objet et son destinataire. Son contenu est rendu à la lecture, avec les droits courants du lecteur, sans montant ni URL signée. | S-52 | Proposé |
 
 ## 13. Paiements
 
@@ -159,6 +170,9 @@ Les exemples chiffrés du CdC (USD 40/kg, marge de USD 3,30, validité de 7 jour
 | BR-PAY-04 | Montant en Decimal avec devise, rattaché à un Trade. | CdC §30, RJ 33 | Défini |
 | BR-PAY-05 | Bénéficiaire, auteur de la saisie, paiements partiels ou multiples, coordonnées bancaires présentées à l'acheteur. | — | À VALIDER (Q-54, Q-55) |
 | BR-PAY-06 | Un remboursement est enregistré et audité, sans flux réel. | CdC §30 | Défini (autorisation : Q-56) |
+| BR-PAY-07 | (J2) **Séparation des tâches** : l'admin qui a saisi un Payment Record ou l'a passé en Processing ne peut pas le confirmer. Même règle pour un remboursement. | S-34 | Proposé (seuil de double validation : Q-88) |
+| BR-PAY-08 | (J2) Un Payment Record est orienté (payeur, bénéficiaire). En Modèle A : acheteur → MadaSource et MadaSource → exportateur ; en Modèle B : acheteur → exportateur. Chaque justificatif hérite de l'audience de son paiement. | S-40 | Proposé (Q-54, Q-82) |
+| BR-PAY-09 | (J2) Toute modification de coordonnées bancaires (exportateur ou MadaSource) exige une permission dédiée, une ré-authentification, une notification et une re-vérification avant prise d'effet. | S-44 | À VALIDER (Q-87) |
 
 ## 14. Expéditions
 
@@ -177,6 +191,7 @@ Les exemples chiffrés du CdC (USD 40/kg, marge de USD 3,30, validité de 7 jour
 | BR-REP-03 | Aucune évaluation, note ou statistique artificielle. | CdC §42 | Défini |
 | BR-REP-04 | « NEW ON MADASOURCE » s'affiche tant que l'historique de transactions est insuffisant. | CdC §42 | Défini (seuil : Q-59) |
 | BR-REP-05 | Les indicateurs de performance sont calculés uniquement à partir de données réelles de la plateforme. | CdC §43-44 | Défini |
+| BR-REP-06 | (J2) Un indicateur n'est affiché publiquement qu'au-delà d'un seuil d'activité : sur un seul Trade, « 100 % de litiges » révèle un fait privé. Les RFQ jugées abusives sont exclues du calcul. | S-51, S-55 | À VALIDER (Q-86) |
 
 ## 16. Exceptions et litiges
 
@@ -195,6 +210,7 @@ Les exemples chiffrés du CdC (USD 40/kg, marge de USD 3,30, validité de 7 jour
 | BR-AUD-02 | Le journal d'audit est en ajout seul : aucun endpoint ne le modifie ni ne le supprime. | RJ 12 | Défini |
 | BR-AUD-03 | L'audit ne contient jamais mot de passe, token, données bancaires complètes ni contenu de document privé. | RJ 12 | Défini |
 | BR-AUD-04 | Actions sensibles minimales : comptes, rôles, vérifications, produits, RFQ, offres, négociations, trades, documents, paiements, expéditions, administration. | RJ 12, CdC §52 | Défini |
+| BR-AUD-05 | (J2) Sont aussi audités :<br>- les consultations sensibles : données bancaires, documents privés, conversations, journal d'audit, exports ;<br>- les événements de sécurité : échecs de connexion, refus d'accès inter-organisations.<br>Les valeurs enregistrées suivent la classification des champs : en clair, masquées, ou réservées à la lecture financière. | S-16, security-design.md §18 | Proposé |
 
 ## 18. Identifiants lisibles
 

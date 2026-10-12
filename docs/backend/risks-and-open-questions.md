@@ -1,6 +1,6 @@
 # Risques, contradictions et questions ouvertes — MadaSource
 
-Jour 1 · 2026-10-12 · Statut : à revoir avec le client
+Jour 1 · 2026-10-12 · Statut : à revoir avec le client · **Mis à jour au Jour 2** : risques R-26 à R-31, contradictions SRC-16 à SRC-19, questions Q-78 à Q-92 (marquées « (J2) »)
 
 Ce document est le point d'entrée des décisions `À VALIDER`. Chaque question indique le jour de la roadmap backend qu'elle bloque ou influence. Une question tranchée est déplacée en section 5 avec la décision et sa date, jamais supprimée.
 
@@ -26,15 +26,21 @@ Impact estimé : Élevé, Moyen ou Faible. L'impact est une estimation d'analyse
 | R-14 | Données personnelles : acheteurs européens (RGPD) et loi malgache sur la protection des données personnelles. Le droit à l'effacement entre en tension avec l'audit en ajout seul et l'historique immuable. | Juridique | Élevé | Avis juridique ; minimisation des données personnelles dans l'audit ; politique de conservation. | Q-68, Q-69 |
 | R-15 | Mode DEMO mélangé aux données réelles, ou transactions simulées perçues comme réelles. | Métier / sécurité | Élevé | Environnement séparé recommandé ; marquage explicite (BR-DEMO-02). | Q-67 |
 | R-16 | Responsabilité liée au badge « vérifié » : un niveau attribué sans vérification documentaire réelle engage la confiance des acheteurs. | Juridique / métier | Moyen | Politique de vérification écrite, traçabilité des décisions (BR-VER-02), expiration. | Q-15 |
-| R-17 | Le cahier des charges est hors du dépôt (dossier de téléchargements) et non versionné : risque de perte ou de divergence de version. | Projet | Moyen | Archiver une copie de référence (avec accord, confidentialité). | Q-71 |
+| R-17 | Mis à jour au Jour 2. Le cahier des charges a été versionné et poussé sur le dépôt distant le 2026-10-12 (commit c6e27d8) : sa perte n'est plus un risque, sa confidentialité en devient un (R-26). | Projet | Faible | Une seule copie de référence, celle du dépôt. | Q-71 |
 | R-18 | Pièges techniques de SQLAlchemy async (lazy loading, sessions) : erreurs à l'exécution et problèmes N+1. | Technique | Moyen | Règles `.claude/rules/backend-python.md`, revue `database-reviewer`, chargement explicite. | — |
 | R-19 | Aucun fournisseur d'email : vérification d'email et notifications externes impossibles en conditions réelles. | Technique / planning | Moyen | Adaptateur abstrait et mode local identifié (RJ 11) ; choix du fournisseur avant la mise en production. | Q-52 |
-| R-20 | Pas de dépôt Git avant le Jour 4, pas de CI avant le Jour 7 : aucun historique ni retour arrière. | Projet | Faible | Initialiser Git dès le Jour 4, ou plus tôt sur accord. | — |
+| R-20 | Mis à jour au Jour 2. Dépôt Git initialisé et poussé sur GitHub le 2026-10-12, mais **sans `.gitignore`** : un `.env` ou un environnement virtuel créé avant le Jour 4 serait versionné et publié. Pas de CI avant le Jour 7. | Sécurité / projet | Moyen | Créer le `.gitignore` avant tout `.env` (Jour 4, ou plus tôt sur accord). Les hooks refusent déjà l'écriture d'un `.env` par Claude. | — |
 | R-21 | Spam et abus sur les endpoints publics (inscription, « Request a Quote », contact). | Sécurité | Moyen | Rate limiting (CdC §60), compte requis pour une RFQ (à décider). | Q-28 |
 | R-22 | Attributs produits flexibles (variables par catégorie) : qualité des données et performance des filtres. | Technique | Moyen | Attributs typés et validés par catégorie, index sur les filtres réels (Jour 3). | Q-18 |
 | R-23 | Ambiguïté sur les délais en jours (« validité 7 jours ») selon le fuseau (Madagascar UTC+3, acheteurs en Europe). | Métier / technique | Faible | Stockage UTC, instant d'expiration explicite. | Q-70 |
 | R-24 | Indicateurs de performance et avis peu nombreux au lancement : matching biaisé contre les nouveaux exportateurs. | Métier | Faible | Mention « NEW ON MADASOURCE », traitement neutre de l'absence d'historique (à décider). | Q-32, Q-59 |
 | R-25 | Exigences non fonctionnelles non chiffrées (volumétrie, disponibilité, sauvegarde) : dimensionnement et tests de performance sans cible. | Technique | Moyen | Obtenir des ordres de grandeur avant l'Audit C. | Q-72 |
+| R-26 | (J2) Visibilité du dépôt distant (GitHub) non vérifiée. S'il est public, le cahier des charges, les règles de marge et la conception de sécurité sont lisibles par tous. | Sécurité / juridique | Élevé | Vérifier immédiatement que le dépôt est privé. Retirer le document de l'historique seulement avec un accord explicite : opération destructive, sans effet sur les clones existants. | Q-71 |
+| R-27 | (J2) Compte admin compromis ou fraude interne : accès transversal aux marges et aux données bancaires, confirmation de paiements fictifs. | Sécurité | Élevé | Second facteur, ensembles de permissions admin, séparation des tâches, ré-authentification, audit des consultations (S-09, S-12, S-16, S-34, S-35). | Q-80, Q-88, Q-89 |
+| R-28 | (J2) Détournement de paiement par modification des coordonnées bancaires (exportateur ou MadaSource). | Sécurité / métier | Élevé | Contrôle renforcé des modifications (S-44). | Q-55, Q-87 |
+| R-29 | (J2) Fuite entre exportateurs concurrents destinataires d'une même RFQ : questions, documents, conversations. | Sécurité / métier | Élevé | Rattachement à la paire (RFQ, exportateur), participants explicites (S-31, S-46). | Q-84 |
+| R-30 | (J2) Instance DEMO utilisée comme fausse preuve de paiement ou d'expédition. | Métier / sécurité | Moyen | Espace de noms d'identifiants distinct, marqueur dans chaque réponse et document, emails désactivés (S-57). | Q-67 |
+| R-31 | (J2) Prix accepté différent du prix affiché, si l'offre ou les règles changent pendant la consultation. | Métier | Moyen | Version de l'offre présentée et acceptée (S-43). | Q-91 |
 
 ## 2. Matrice de périmètre (synthèse)
 
@@ -79,13 +85,14 @@ Format : question — contexte — jour bloqué ou influencé.
 ### 4.1 Modèle commercial et prix
 
 - **Q-01** — Modèle commercial V1 : A (revendeur), B (intermédiaire) ou les deux ? Choix global, par exportateur ou par transaction ? — CdC §2, §75 — **bloque J24**.
-- **Q-02** — Formule de marge en Modèle A : montant par unité, pourcentage, par catégorie, produit ou acheteur ? Qui la configure et avec quelle traçabilité ? — CdC §17 — J24.
+- **Q-02** — Formule de marge en Modèle A : montant par unité, pourcentage, par catégorie, produit ou acheteur ? Qui la configure et avec quelle traçabilité ? Attention : une marge en pourcentage, combinée au détail des coûts visible de l'acheteur (Q-04), rend le taux de marge calculable (S-19). — CdC §17 — J24.
 - **Q-03** — Commission en Modèle B : base de calcul, payeur (acheteur ou exportateur), visibilité pour chaque partie. — CdC §2 — J24.
-- **Q-04** — Coûts externes en V1 : qui les saisit (admin, exportateur) ? Le détail est-il visible par l'acheteur, par l'exportateur ? Comportement si un coût est expiré (blocage ou avertissement) ? — CdC §17, §33 — J24.
-- **Q-05** — Négociation en Modèle A : comment une contre-offre de l'acheteur (prix final) se traduit-elle pour l'exportateur (prix net) ? Marge constante, renégociée, validation admin ? L'exportateur voit-il le prix final acheteur ? — CdC §20, §61 — **bloque J26**.
-- **Q-06** — Indication de prix du catalogue : prix net exportateur ou prix commercial MadaSource ? Visible publiquement ou seulement par les acheteurs connectés ? — CdC §5-6, §61 — J16, J18.
+- **Q-04** — Coûts externes en V1 : qui les saisit (admin, exportateur) ? Le détail est-il visible par l'acheteur, par l'exportateur ? Comportement si un coût est expiré (blocage ou avertissement) ? Voir Q-02 pour le risque de déduction du taux de marge. — CdC §17, §33 — J24.
+- **Q-05** — Négociation en Modèle A : comment une contre-offre de l'acheteur (prix final) se traduit-elle pour l'exportateur (prix net) ? Marge constante, renégociée, validation admin ? L'exportateur voit-il le prix final acheteur ? S'il le voit, il calcule la marge (S-19). Un rejet automatique sous un prix plancher permettrait de découvrir ce plancher (S-42). — CdC §20, §61 — **bloque J26**.
+- **Q-06** — Indication de prix du catalogue : prix net exportateur ou prix commercial MadaSource ? Visible publiquement ou seulement par les acheteurs connectés ? Une indication publique est vue par tous les exportateurs : nette, elle révèle le prix net à l'acheteur ; commerciale, elle révèle la marge à l'exportateur. Options : fourchette, ou aucun prix public. — CdC §5-6, §61 — J16, J18.
 - **Q-07** — Validation admin d'une quotation avant présentation à l'acheteur : systématique, au-delà d'un seuil (« high-value »), ou jamais ? — CdC §38 — J24, J25.
 - **Q-08** — Précision et arrondis des montants (décimales par devise, prix unitaire et total, mode d'arrondi). — RJ section 1 — J3, J24.
+- **Q-91** — (J2) Une modification des règles de prix (marge, commission) s'applique-t-elle aux quotations déjà présentées à l'acheteur, ou seulement aux nouvelles ? — S-43 — J24, J25.
 
 ### 4.2 Comptes et organisations
 
@@ -95,14 +102,16 @@ Format : question — contexte — jour bloqué ou influencé.
 - **Q-12** — Statuts du compte exportateur (distincts de la vérification). Un exportateur non vérifié peut-il publier, recevoir des RFQ, envoyer des quotations ? — CdC §11, §36 — J14, J15.
 - **Q-13** — Lien entre la vérification d'email et le statut du compte. — RJ 11 — J11.
 - **Q-14** — Procédure de création du premier administrateur et des comptes admin suivants. — RJ 10 — J10.
-- **Q-74** — Un utilisateur peut-il appartenir à plusieurs organisations ? Les administrateurs appartiennent-ils à une organisation interne « MadaSource » ? — CdC §54 — J3, J9.
+- **Q-74** — Un utilisateur peut-il appartenir à plusieurs organisations ? Les administrateurs appartiennent-ils à une organisation interne « MadaSource » ? Proposition : un admin n'est jamais membre d'une organisation cliente (S-33). — CdC §54 — J3, J9.
 - **Q-76** — Durée de vie des tokens d'accès et de rafraîchissement, rotation, politique de mot de passe (longueur, complexité), verrouillage après échecs de connexion. — RJ 10 (« selon les règles validées ») — J8, J10.
+- **Q-80** — (J2) Second facteur d'authentification obligatoire pour les administrateurs ? Proposé, ou obligatoire, pour les utilisateurs des organisations clientes ? — CdC §60 ; S-09 — J10.
 
 ### 4.3 Vérification
 
 - **Q-15** — Critères et documents requis par niveau ; durée de validité ; passage automatique en Expired à la date d'expiration ; renouvellement ; communication du motif de rejet à l'exportateur ; nouvelle demande après rejet ou expiration. — CdC §8, Planning §13 — J15.
 - **Q-16** — Niveau minimal pour le Digital Passport, l'apparition au marketplace et la réception de RFQ. Statuts de vérification affichés publiquement : seulement le niveau obtenu, ou aussi Pending, Rejected, Expired, Suspended ? — CdC §9, §14, §61 — J15, J18, J22.
-- **Q-17** — Format de l'URL publique (slug, unicité, changement de nom), domaine définitif, contenu du QR code. — CdC §9 — J18.
+- **Q-17** — Format de l'URL publique (slug, unicité, changement de nom), domaine définitif, contenu du QR code. Proposition : un slug n'est jamais réattribué (S-54). — CdC §9 — J18.
+- **Q-90** — (J2) Les champs couverts par une vérification (raison sociale, immatriculation…) sont-ils gelés, ou leur modification renvoie-t-elle la vérification en revue avec badge suspendu ? — CdC §8-9 ; S-53 — J14, J15.
 
 ### 4.4 Produits et marketplace
 
@@ -111,6 +120,8 @@ Format : question — contexte — jour bloqué ou influencé.
 - **Q-20** — Liste des certifications reconnues et preuve exigée. — CdC §6 — J16.
 - **Q-21** — Unités admises (kg, tonne) et normalisation ; « T » = tonne métrique ? — CdC §13, §19 — J16, J19.
 - **Q-77** — Règle de priorisation et de tri des résultats de recherche acheteur (le CdC dit « should prioritize » : produit, exportateur, qualité, certification, disponibilité, prix, vérification). — CdC §50 — J18.
+- **Q-78** — (J2) Effet de la désactivation d'une catégorie (feature flag) sur les produits, RFQ, quotations et Trades existants : seules les créations sont bloquées, ou autre traitement ? — CdC §71 ; D-17 — J16.
+- **Q-86** — (J2) Liste blanche du profil public exportateur. Le CdC §61 ne rend publics que le nom, les produits, la vérification, la localisation générale et les certifications. Faut-il y ajouter logo, description, années d'activité, marchés d'export, capacité, avis, indicateurs ? Seuil d'activité minimal avant d'afficher un indicateur ? — CdC §7, §43, §61 ; S-51 — J18, J35.
 
 ### 4.5 RFQ
 
@@ -119,14 +130,16 @@ Format : question — contexte — jour bloqué ou influencé.
 - **Q-24** — États manquants (annulée, aucun exportateur compatible, aucune quotation) ; déclencheur de « Quotations Received » (première ou toutes) et de « Closed » ; statuts côté destinataire (Sent, Responded, Declined). — CdC §12, §15 — J19, J21.
 - **Q-25** — Une RFQ porte-t-elle sur une catégorie (« Vanilla ») ou sur un produit précis d'un exportateur ? Plusieurs produits par RFQ (RFQItems) ? RFQ adressée directement à un exportateur choisi ? — CdC §12, §55 — J19.
 - **Q-26** — Plusieurs quotations acceptées pour une même RFQ (achat réparti entre exportateurs) ? — CdC §22 — J27.
-- **Q-27** — Identité de l'acheteur visible par l'exportateur dans l'inbox (l'exemple du §15 ne montre que le pays) ; moment où elle est révélée. — CdC §15 — J21.
+- **Q-27** — Identité de l'acheteur visible par l'exportateur dans l'inbox (l'exemple du §15 ne montre que le pays) ; moment où elle est révélée. La règle vaut aussi pour les champs « auteur » des historiques et des documents (S-48). — CdC §15 — J21.
 - **Q-28** — « Request a Quote » du site public : compte acheteur obligatoire ? Formulaire « Contact » géré par le backend ? — CdC §4 — J18, J20.
 - **Q-29** — RFQ en langage naturel : confirmée hors V1 ? — CdC §13 — J19.
+- **Q-84** — (J2) Une question d'exportateur sur une RFQ reste-t-elle privée entre lui et l'acheteur, ou la réponse est-elle diffusée, anonymisée, à tous les destinataires ? — CdC §15, §28 ; S-31 — J21, J30.
+- **Q-85** — (J2) Champs de la RFQ visibles par l'exportateur destinataire : prix cible (en Modèle A, c'est un prix final, qui renseigne sur la marge), préférence de paiement, port, exigences supplémentaires ? — CdC §12, §15 ; S-50 — J21.
 
 ### 4.6 Matching
 
 - **Q-30** — Pondérations initiales, seuil minimal de score, nombre maximal d'exportateurs destinataires. — CdC §14 — J22.
-- **Q-31** — Envoi aux exportateurs automatique ou après validation admin ? Scores et raisons visibles par l'acheteur ? Par l'exportateur ? — CdC §14, RFS J 23 — J23.
+- **Q-31** — Envoi aux exportateurs automatique ou après validation admin ? Scores et raisons visibles par l'acheteur ? Par l'exportateur ? Contenu des raisons : jamais de valeur privée d'un tiers (S-49). — CdC §14, RFS J 23 — J23.
 - **Q-32** — La performance historique et le taux de réponse entrent-ils dans le score dès la V1 (CdC §14), ou seulement dans le matching futur (CdC §43, §69 ; SRC-16) ? Si c'est dès la V1 : traitement des exportateurs sans historique. — CdC §14, §43, §69 — J22.
 - **Q-33** — Vérification : critère éliminatoire ou pondéré ? — CdC §14 — J22.
 
@@ -135,7 +148,7 @@ Format : question — contexte — jour bloqué ou influencé.
 - **Q-34** — Cycle de vie d'une quotation (brouillon, soumise, retirée, refusée…) ; modification ou retrait par l'exportateur. — CdC §18 — J24, J25.
 - **Q-35** — Seuil de « Expiring » ; durée de validité par défaut éventuelle ; heure exacte d'expiration. — CdC §18 — J25.
 - **Q-36** — Prolongation ou réactivation d'une quotation expirée : autorisée ? Par qui ? — RJ 25 — J25.
-- **Q-37** — Format exact des identifiants (`RFQ-AAAA-NNNN` ou 6 chiffres ; `MSQ` sur 4 ou 6 chiffres) ; remise à zéro annuelle. — CdC §16, §66 — J19, J24, J27.
+- **Q-37** — Format exact des identifiants (`RFQ-AAAA-NNNN` ou 6 chiffres ; `MSQ` sur 4 ou 6 chiffres) ; remise à zéro annuelle. Des références séquentielles révèlent le volume d'activité de la plateforme : est-ce acceptable (S-54) ? — CdC §16, §66 — J19, J24, J27.
 
 ### 4.8 Négociation
 
@@ -151,17 +164,19 @@ Format : question — contexte — jour bloqué ou influencé.
 - **Q-44** — On Hold et Disputed : depuis quels états, retour à l'état précédent ? — CdC §24 — J28.
 - **Q-45** — Conditions de paiement autres que le prépaiement en V1 ? — CdC §16, §24 — J28, J33.
 - **Q-46** — Inspection : simple événement de timeline en V1 ? — CdC §25 — J28.
+- **Q-82** — (J2) En Modèle A, quels objets d'un Trade sont partagés entre acheteur et exportateur, et lesquels restent bilatéraux avec MadaSource : termes, documents commerciaux et de paiement, Payment Records, commentaires de timeline, litiges ? Quelle contrepartie est affichée à chacun (MadaSource ou l'autre partie) ? — CdC §2, §23, §30, §61 ; S-39, S-40 — J3, J24 à J33, **bloque J27**.
 
 ### 4.10 Documents
 
 - **Q-47** — Documents obligatoires par étape (facture, certificat d'origine, phytosanitaire, connaissement…) et leur validation par l'admin. — CdC §26, Planning §13 — J29, J34.
 - **Q-48** — Statuts de document, taille maximale, analyse antivirus, durée de conservation. — CdC §26 — J29.
 - **Q-49** — Stockage : fournisseur S3-compatible, localisation géographique des données. — RJ 29 — J29.
+- **Q-83** — (J2) Gouvernance de la visibilité des documents : qui fixe l'audience (déposant, admin) ? Valeur par défaut par catégorie ? Validation admin avant partage ? Retrait d'un partage ? Traitement des métadonnées embarquées des documents bureautiques (auteur, suivi des modifications) ? — CdC §26, §61 ; S-24, S-27 — J29.
 
 ### 4.11 Messagerie et notifications
 
-- **Q-50** — L'admin peut-il lire les conversations ? Un auteur peut-il modifier ou supprimer son message ? — CdC §28, §34 — J30.
-- **Q-51** — Échange de coordonnées directes : autorisé, masqué ou signalé ? — CdC §61 — J30.
+- **Q-50** — L'admin peut-il lire les conversations ? Si oui, avec motif, audit et information des participants (S-46) ? Un auteur peut-il modifier ou supprimer son message ? — CdC §28, §34 — J30.
+- **Q-51** — Échange de coordonnées directes : autorisé, masqué ou signalé ? Un prix écrit dans un message échappe à toute projection (R-05). — CdC §61 — J30.
 - **Q-52** — Fournisseur d'email (V1 ou plus tard) ; destinataires de chaque notification ; notifications supplémentaires (contre-offre exportateur, vérification, expiration proche, litige). — CdC §29 — J11, J31.
 
 ### 4.12 Échantillons
@@ -170,9 +185,12 @@ Format : question — contexte — jour bloqué ou influencé.
 
 ### 4.13 Paiements
 
-- **Q-54** — Qui reçoit le paiement (MadaSource en Modèle A, l'exportateur en Modèle B ?) ; qui l'enregistre (acheteur, admin) ; paiements partiels ou multiples par Trade. — CdC §30, Planning §13 — **bloque J33**.
+- **Q-54** — Qui reçoit le paiement (MadaSource en Modèle A, l'exportateur en Modèle B ?) ; qui l'enregistre (acheteur, admin) ; paiements partiels ou multiples par Trade ; sens de chaque paiement et audience de chaque justificatif (S-40, Q-82). — CdC §30, Planning §13 — **bloque J33**.
 - **Q-55** — Coordonnées bancaires présentées à l'acheteur pour le virement : celles de MadaSource ou de l'exportateur ? — CdC §11, §30 — J33.
-- **Q-56** — Remboursement : enregistrement seul ? Qui l'autorise ? — CdC §30 — J33.
+- **Q-56** — Remboursement : enregistrement seul ? Qui l'autorise ? Séparation des tâches proposée : jamais l'auteur de la saisie (S-34). — CdC §30 — J33.
+- **Q-81** — (J2) Chiffrement applicatif des coordonnées bancaires : gestion de la clé (variable d'environnement ou gestionnaire de secrets), rotation, rechiffrement ? — CdC §11, §60 ; S-22 — J14.
+- **Q-87** — (J2) Modification des coordonnées bancaires, de l'exportateur comme de MadaSource : qui peut les modifier, quelle validation (re-vérification par MadaSource ?), quelles notifications, quel délai avant prise d'effet ? — CdC §11, §30 ; S-44 — J14, J33.
+- **Q-88** — (J2) Confirmation et remboursement d'un paiement : double validation par deux admins, toujours ou au-delà d'un seuil ? — CdC §30 ; S-34 — J33.
 
 ### 4.14 Expéditions
 
@@ -184,40 +202,49 @@ Format : question — contexte — jour bloqué ou influencé.
 - **Q-59** — Échelle de notation ; seuil de « NEW ON MADASOURCE » ; une évaluation par sens ; modération ; délai pour évaluer ; visibilité des avis sur les acheteurs. — CdC §42, §44 — J35.
 - **Q-60** — Statuts des exceptions ; exceptions détectées automatiquement et leurs seuils. — CdC §40 — J35.
 - **Q-61** — Effet d'un litige sur le Trade et les paiements ; qui propose et accepte la résolution ; refus d'une résolution. — CdC §41, Planning §13 — J35.
+- **Q-92** — (J2) Un litige (motif, preuves, montant de la résolution proposée) est-il visible de l'autre partie ? — CdC §41 — J35.
 
 ### 4.16 Administration et périmètre
 
 - **Q-62** — Analytique et rapports admin (CdC §63) en V1 backend ? Quels indicateurs ? — CdC §63, Planning §4 — J35.
 - **Q-63** — Favoris, recherche globale et agrégations des tableaux de bord Buyer et Exporter : V1 ou plus tard ? — CdC §48-51 — J13 à J35.
 - **Q-64** — Module admin « Partners » : désactivé en V1 ? — CdC §34 — J35.
+- **Q-89** — (J2) En V1, tous les admins voient-ils marges, données bancaires, documents privés et conversations, ou faut-il répartir les ensembles de permissions admin entre plusieurs personnes ? — CdC §53 ; S-12 — J9.
 
 ### 4.17 Transverse
 
 - **Q-65** — Conversion de devises en V1 ? Source des taux (saisie manuelle par l'admin ?) ? Comparaison de quotations en devises différentes ? — CdC §59 — J24, J25.
 - **Q-66** — i18n : libellés traduits (catégories, attributs, statuts, erreurs) servis par l'API ou gérés par le frontend ? — CdC §58 — J2, J16.
-- **Q-67** — Mode DEMO : environnement séparé (recommandé) ou enregistrements marqués dans la même base ? Qui l'active ? — CdC §68 — J2, J3.
+- **Q-67** — Mode DEMO : environnement séparé (recommandé) ou enregistrements marqués dans la même base ? Qui l'active ? Accès à l'instance (sur invitation ?), préfixe distinct des identifiants, emails désactivés (S-57) ? — CdC §68 — J2, J3.
 - **Q-68** — Conformité des données personnelles (RGPD pour les acheteurs européens, loi malgache) : base légale, conservation, droit à l'effacement face à l'audit immuable. — CdC §60-61 — J3, J12.
 - **Q-69** — Durée de conservation des journaux d'audit, documents, messages. — CdC §52 — J12, J29.
 - **Q-70** — Fuseau de référence pour les échéances exprimées en jours (UTC, Madagascar, fuseau de l'acheteur). — CdC §18 — J25.
-- **Q-71** — Archiver le cahier des charges dans le dépôt (`docs/source/`), compte tenu de sa confidentialité ? — — J4.
+- **Q-71** — Mise à jour au Jour 2 : le cahier des charges a été versionné et poussé sur le dépôt distant le 2026-10-12 (commit c6e27d8). À confirmer **en urgence** : le dépôt est-il privé, et ce document client peut-il y rester ? — R-26 — immédiat.
 - **Q-72** — Exigences non fonctionnelles chiffrées : nombre d'utilisateurs et de transactions, temps de réponse, disponibilité, RPO/RTO des sauvegardes. — CdC §60 — J2, Audit C.
 - **Q-73** — Version de référence des Incoterms (Incoterms® 2020 ?). — CdC §32 — J24.
 - **Q-75** — Feature flags, mode DEMO, i18n et séparation des taux de change ne sont prévus par aucun jour de la roadmap backend (SRC-18). Retenir les jours proposés dans v1-scope.md (Jours 2 à 5), ou ajouter des jours au planning ? — CdC §58-59, §68, §71 — J2.
+- **Q-79** — (J2) Hébergement de production : fournisseur, pays et localisation des données, gestionnaire de secrets, existence d'un environnement de staging. — CdC §77 (point 7) ; D-11, architecture.md §11 — J4, Audit D.
 
 ### 4.18 Questions bloquantes par jour (synthèse)
 
 | Jour | Questions à trancher avant le jour |
 |---|---|
-| J2-J3 (architecture, données) | Q-09, Q-10, Q-25, Q-37, Q-66, Q-67, Q-68, Q-74, Q-75 |
-| J8-J15 (sécurité, accès, comptes, vérification) | Q-10, Q-11, Q-12, Q-13, Q-14, Q-15, Q-16, Q-74, Q-76 |
-| J16-J18 (produits, marketplace) | Q-06, Q-17, Q-18, Q-19, Q-20, Q-21, Q-77 |
-| J19-J23 (RFQ, matching) | Q-22, Q-23, Q-24, Q-25, Q-27, Q-30, Q-31, Q-32 |
-| J24-J27 (quotations, négociation, Trade) | **Q-01**, Q-02, Q-03, Q-04, **Q-05**, Q-26, Q-34, Q-35, Q-38 |
-| J28-J35 (opérations) | **Q-41**, **Q-42**, Q-43, Q-47, Q-53, **Q-54**, Q-58, Q-59, Q-61, Q-62 |
+| Immédiat | **Q-71** (confidentialité du dépôt distant) |
+| J2-J3 (architecture, données) | Q-09, Q-10, Q-25, Q-37, Q-66, Q-67, Q-68, Q-74, Q-75, Q-82 |
+| J4 (initialisation du dépôt) | Q-79 |
+| J8-J15 (sécurité, accès, comptes, vérification) | Q-10, Q-11, Q-12, Q-13, Q-14, Q-15, Q-16, Q-74, Q-76, Q-80, Q-81, Q-87, Q-89, Q-90 |
+| J16-J18 (produits, marketplace) | Q-06, Q-17, Q-18, Q-19, Q-20, Q-21, Q-77, Q-78, Q-86 |
+| J19-J23 (RFQ, matching) | Q-22, Q-23, Q-24, Q-25, Q-27, Q-30, Q-31, Q-32, Q-84, Q-85 |
+| J24-J27 (quotations, négociation, Trade) | **Q-01**, Q-02, Q-03, Q-04, **Q-05**, Q-26, Q-34, Q-35, Q-38, **Q-82**, Q-91 |
+| J28-J35 (opérations) | **Q-41**, **Q-42**, Q-43, Q-47, Q-53, **Q-54**, Q-58, Q-59, Q-61, Q-62, Q-83, Q-88, Q-92 |
 
 ## 5. Décisions prises
 
-Aucune à ce jour. Format attendu :
+Aucune décision explicite du client à ce jour.
+
+Fait constaté le 2026-10-12 : l'utilisateur a versionné le cahier des charges dans le dépôt (commit c6e27d8). La question de confidentialité (Q-71) reste ouverte.
+
+Format attendu :
 
 | Date | Question | Décision | Décideur | Impact sur les documents |
 |---|---|---|---|---|
