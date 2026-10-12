@@ -69,7 +69,7 @@ Claude peut aussi activer un skill de lui-même quand sa description correspond 
 
 | Fichier | Chargé quand Claude lit ou modifie | Contenu |
 |---|---|---|
-| `backend-python.md` | `backend/app/**/*.py` | Couches, SQLAlchemy async, Pydantic v2, Decimal, UTC, statuts, logs |
+| `backend-python.md` | `backend/app/**/*.py` | Couches, dépendances inter-modules par niveau et ports, transactions (commit par le cas d'usage), erreurs, SQLAlchemy async, Pydantic v2, Decimal, UTC, statuts, logs |
 | `alembic-migrations.md` | `backend/alembic/**`, `backend/alembic.ini` | Migrations immuables, opérations destructrices, downgrade |
 | `tests.md` | `backend/tests/**` | Structure, cas obligatoires, interdits |
 | `documentation.md` | `docs/**` | Traçabilité CdC, `À VALIDER`, séparation V1/futur |

@@ -23,6 +23,11 @@ Ne sont rapportés que les éléments réellement inspectés. Les points non vé
 | Ports hôte occupés | 5432 (PostgreSQL natif), 6379 (Valkey), 8000 (uvicorn d'un autre projet) | `ss -ltnp` |
 | Venv parent | `~/Dev/.venv` (Python 3.14, 87 paquets), trouvé par `uv run --no-project` depuis ce dossier. Aucun `VIRTUAL_ENV` actif. | |
 
+> **Mise à jour du 2026-10-12, 15 h 27** :
+> - l'utilisateur a initialisé un dépôt Git (branche `main`, remote GitHub `origin`, commit « preparations ») et ajouté le cahier des charges à la racine. Le fichier est identique à celui de `~/Téléchargements/` (même empreinte SHA-256) ;
+> - aucun `.gitignore` n'existe encore (prévu au Jour 4). Seul `.claude/settings.local.json` est exclu, par le fichier global `~/.config/git/ignore` de l'utilisateur ;
+> - Python système : 3.14.8.
+
 ## 2. État initial du projet
 
 - Fichiers présents : `planning.md`, `roadmap.md`, `roadmap_backend_fastapi.md`. Aucun code, aucun `CLAUDE.md`, aucun `.claude/`, aucun `pyproject.toml`, aucun `README.md`.

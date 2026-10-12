@@ -5,7 +5,7 @@ Ce dépôt contient **uniquement le backend** : une API REST FastAPI. Le fronten
 
 ## Sources de référence
 
-1. Cahier des charges client : « MadaSource — Complete Platform Architecture & Functional Requirements » (PDF de 34 pages, hors dépôt, actuellement dans `~/Téléchargements/`). Cité « CdC §N ».
+1. Cahier des charges client : « MadaSource — Complete Platform Architecture & Functional Requirements » (PDF de 34 pages, versionné à la racine : `MadaSource Platform Architecture.pdf`). Cité « CdC §N ».
 2. `planning.md` : planning client (50 jours, 10 étapes).
 3. `roadmap_backend_fastapi.md` : **roadmap backend de référence (35 jours + audits A–D)**. Les « jours » exécutés sont ceux de ce fichier.
 4. `roadmap.md` : roadmap full-stack initiale (50 jours). Contexte uniquement.
@@ -30,7 +30,8 @@ Redis/Celery uniquement si justifié. Toute nouvelle dépendance doit être just
 
 - Monolithe modulaire : `backend/app/modules/<module>/` avec `models.py`, `schemas.py`, `service.py`, `router.py`, `permissions.py`, et `repository.py` si utile.
 - Routes HTTP minces : validation → authentification/permission → appel du service → schéma de réponse. La logique métier vit dans `service.py`.
-- Un module n'importe pas les internes d'un autre module : il passe par son service public. Les frontières sont définies dans `docs/backend/module-boundaries.md` (Jour 2).
+- Un module n'importe pas les internes d'un autre module : il passe par son service public. Il ne dépend que de modules de niveau inférieur ; un appel vers un niveau supérieur passe par un port déclaré. Voir `docs/backend/module-boundaries.md`.
+- Conventions transverses : `docs/backend/architecture.md` (transactions, dates, montants, flags, DEMO), `api-conventions.md`, `error-handling.md`, `testing-strategy.md`, `security-design.md`.
 - REST versionnée sous `/api/v1`, OpenAPI à jour.
 - Ne pas créer de fichiers vides pour des modules futurs.
 
@@ -86,6 +87,7 @@ Redis/Celery uniquement si justifié. Toute nouvelle dépendance doit être just
 
 - Shell interactif : fish. L'outil Bash de Claude Code exécute bash.
 - Ports hôte déjà occupés : 5432 (PostgreSQL natif), 6379 (Valkey), 8000 (uvicorn d'un autre projet). Docker Compose doit utiliser d'autres ports hôte.
-- Python système 3.14, Python 3.12 disponible via uv. Pas de dépôt Git initialisé pour l'instant (prévu au Jour 4).
+- Python système 3.14, Python 3.12 disponible via uv.
+- Dépôt Git initialisé par l'utilisateur (branche `main`, remote GitHub `origin`). Pas encore de `.gitignore` (prévu au Jour 4) : ne créer aucun `.env` ni environnement virtuel dans le dépôt avant. Commit et push uniquement à la demande de l'utilisateur.
 
 Configuration Claude Code (agents, skills, hooks) : `docs/backend/claude-code-setup.md`.
