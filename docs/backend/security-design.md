@@ -66,8 +66,8 @@ Décisions de sécurité : identifiants **S-NN** ; statuts Retenu / Proposé / �
 | S-05 | **Révocation immédiate** à la déconnexion, au changement ou à la réinitialisation du mot de passe, à la suspension du compte et au retrait d'adhésion. La session (`sid`) est vérifiée à chaque requête. | Proposé |
 | S-06 | **Connexion** : réponse unique (BR-ACC-05), durée comparable (hachage effectué même pour un compte inexistant), limites par IP et par compte, ralentissement progressif plutôt que blocage définitif. | Proposé |
 | S-07 | **Vérification d'email et réinitialisation** : jetons à usage unique, stockés hachés, de courte durée. Réinitialisation suivie d'une révocation des sessions (RJ 10, RJ 11). | Proposé |
-| S-08 | **Premier administrateur** créé par une commande en ligne exécutée sur le serveur, jamais par une route HTTP (RJ 10). | Retenu |
-| S-09 | **Second facteur obligatoire pour les administrateurs**, qui accèdent aux marges, aux données bancaires et aux confirmations de paiement. Facultatif ou obligatoire pour les organisations clientes : à décider. | À VALIDER (Q-80) |
+| S-08 | **Premier administrateur** : jamais par une route publique (RJ 10 : « processus sûr », « pas de route publique de bootstrap »). Proposition : une commande en ligne exécutée sur le serveur. Les administrateurs suivants sont créés ou promus par une intervention orchestrée par `admin`, avec audit et notification aux autres admins. | Retenu (pas de route publique) / Proposé (commande en ligne, Q-14) |
+| S-09 | **Second facteur obligatoire pour les administrateurs**, qui accèdent aux marges, aux données bancaires et aux confirmations de paiement. Mise en œuvre proposée :<br>- la session (`auth`) porte un indicateur « second facteur vérifié » ;<br>- à la construction de l'acteur, `access_control` n'accorde les permissions admin qu'à une session qui le porte.<br><br>Ainsi, `auth` n'a pas besoin de savoir qui est admin. Second facteur facultatif ou obligatoire pour les organisations clientes : à décider. | À VALIDER (Q-80) |
 | S-10 | Transport des jetons pour le futur frontend web (cookie `HttpOnly`, `Secure`, `SameSite` avec protection CSRF, ou en-tête seul) : à décider avec l'architecture du frontend. L'API accepte `Authorization: Bearer`. | À VALIDER |
 | S-35 | **Ré-authentification récente** (mot de passe, et second facteur s'il est actif) exigée pour les actions sensibles : changement d'email ou de mot de passe, modification des coordonnées bancaires, confirmation ou remboursement d'un paiement, gestion des comptes admin, modification des règles de prix. | Proposé |
 | S-56 | **Réponses non énumérantes** pour l'inscription, la réinitialisation et le renvoi de vérification : même réponse, que l'adresse soit déjà connue ou non. La suite se fait par email. L'unicité d'un nom de société ou d'un slug ne doit pas révéler une inscription en attente (F-4). | Proposé |
@@ -90,7 +90,7 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 
 | ID | Décision | Statut |
 |---|---|---|
-| S-29 | Toute lecture est servie pour une **audience explicite** : `public`, `buyer` (organisation acheteuse partie), `exporter_owner` (organisation exportatrice émettrice ou propriétaire), `exporter_recipient` (exportateur destinataire d'une RFQ), `madasource` (admin) et `madasource_finance` (admin habilité aux données financières). La politique d'accès choisit l'audience, jamais le router. P-01 ([module-boundaries.md](module-boundaries.md)) renvoie une audience, pas un booléen. | Proposé |
+| S-29 | Toute lecture est servie pour une **audience explicite** : `public`, `buyer` (organisation acheteuse partie), `exporter_owner` (organisation exportatrice émettrice ou propriétaire), `exporter_recipient` (exportateur destinataire d'une RFQ), `madasource` (admin), `madasource_finance` (admin habilité aux données financières) et `self` (l'utilisateur sur son propre compte et ses notifications). La politique d'accès choisit l'audience, jamais le router. P-01 ([module-boundaries.md](module-boundaries.md)) renvoie une audience, pas un booléen. Correspondance avec les suffixes de schémas : [api-conventions.md](api-conventions.md#13-openapi). | Proposé |
 | S-30 | **Participation matérialisée** : on n'est participant qu'à travers un enregistrement explicite et actif. Il s'agit du destinataire de RFQ avec son statut, des parties du Trade et des participants d'une conversation. Un destinataire retiré ou suspendu perd l'accès ; un destinataire qui a décliné ne voit plus que ses propres contributions (F-1). | Proposé |
 | S-31 | Dans une RFQ adressée à plusieurs exportateurs, tout objet partagé est rattaché à la **paire (RFQ, exportateur destinataire)** : questions, réponses, documents, conversations. Un exportateur ne voit jamais les échanges d'un concurrent. La diffusion à tous les destinataires n'a lieu que sur une action explicite de l'acheteur (Q-84). | Proposé |
 | S-36 | **Invariant** : l'organisation acheteuse et l'organisation exportatrice d'une RFQ, d'une quotation ou d'un Trade sont toujours différentes, quelle que soit la réponse à Q-09 (F-2). | Proposé |
@@ -103,6 +103,7 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 | S-14 | **Tout identifiant reçu**, qu'il vienne du chemin, du corps ou des paramètres, passe par la politique d'accès avec l'action précise : lire, rattacher ou partager. Exemples : un document glissé dans un litige, un produit non publié cité dans une RFQ (E-5). | Proposé |
 | S-14 | Les **collections imbriquées** (documents, messages, paiements d'un Trade) sont filtrées élément par élément. Les totaux de pagination portent sur l'ensemble autorisé. | Proposé |
 | S-15 | Objet hors périmètre : **404**, identique à un objet inexistant (D-25). Code 403 réservé à une action interdite sur un objet visible. | Proposé |
+| S-14 | **Détection des tentatives** d'accès inter-organisations, pour l'audit de sécurité (section 18) : après un refus, une lecture système non filtrée vérifie seulement l'existence de l'objet et son organisation. Elle est limitée en débit et son résultat n'est jamais renvoyé au client. C'est une exception déclarée à l'accès filtré. | Proposé |
 | S-17 | Sécurité au niveau des lignes de PostgreSQL : défense en profondeur possible, **non retenue en V1**. Le filtrage S-14 est obligatoire. | Proposé |
 
 ### 5.4 Administration
@@ -111,11 +112,11 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 |---|---|---|
 | S-16 | Accès admin étendu mais non illimité : permissions explicites (S-12), chaque action auditée, aucune modification de l'historique (propositions, TradeEvent, audit), même par un admin. | Proposé |
 | S-16 | Les **consultations** sensibles sont auditées, comme les modifications : données bancaires, documents privés, conversations, journal d'audit, exports. | Proposé |
-| S-32 | Une intervention admin « pour le compte de » une organisation (Q-40) est marquée comme telle, motivée, auditée et notifiée à l'organisation. **L'usurpation d'identité est interdite.** | Proposé |
+| S-32 | Une intervention admin « pour le compte de » une organisation (Q-40) est marquée comme telle, motivée, auditée et notifiée à l'organisation. Elle est orchestrée par le module `admin`, seul à pouvoir appeler les modules concernés et `notifications` sans import montant ([module-boundaries.md](module-boundaries.md) §4). **L'usurpation d'identité est interdite.** | Proposé |
 | S-33 | Un administrateur appartient à l'organisation interne MadaSource et n'est **jamais membre d'une organisation cliente** (Q-74). | Proposé |
 | S-34 | **Séparation des tâches sur les paiements** : l'admin qui a saisi un Payment Record ou l'a passé en Processing ne peut pas le confirmer. Même règle pour un remboursement. Une double validation au-delà d'un seuil est possible (Q-88). | Proposé |
 | S-09, S-35 | Second facteur et ré-authentification (section 4). | À VALIDER, Proposé |
-| — | Comptes admin nominatifs, jamais partagés. Création et promotion sous permission dédiée, avec audit et notification aux autres admins (Q-14). Revue périodique des comptes, désactivation au départ. | Proposé |
+| — | Comptes admin nominatifs, jamais partagés. Création et promotion sous permission dédiée, orchestrées par `admin`, avec audit et notification aux autres admins (S-08, Q-14). Revue périodique des comptes, désactivation au départ. | Proposé |
 
 ## 6. Confidentialité commerciale
 
@@ -130,7 +131,8 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 
 | ID | Décision | Statut |
 |---|---|---|
-| S-18 | Les composantes internes (prix net, coûts externes, marge, commission) ne sont jamais servies à l'audience `public` ni à l'audience `buyer`. La marge n'est jamais servie à une audience exportateur (BR-PRC-09). | Retenu (CdC §61, RJ 24) |
+| S-18 | Le **prix net fournisseur** et la **marge MadaSource** ne sont jamais servis à l'audience `public` ni à l'audience `buyer`. La marge n'est jamais servie à une audience exportateur (BR-PRC-09). | Retenu (CdC §2 et §61 « Commercial margins » ; RJ 24 « coûts fournisseurs confidentiels », « marges internes ») |
+| S-18 | **Coûts externes** détaillés et **commission** : leur visibilité pour l'acheteur et l'exportateur n'est pas fixée par les sources. Coûts externes : Q-04. Commission visible de son payeur : S-41, Q-03. | À VALIDER (Q-03, Q-04) |
 | S-19 | **Non-déduction** : pour chaque audience, la liste des composantes de prix visibles est **fermée et documentée**. Il faut démontrer qu'elle ne permet pas de recalculer une composante cachée, par recoupement de champs, de prix FOB et CIF, de totaux, de paiements, de remboursements, de prix d'échantillon ou de tableaux de bord. Un champ public est visible de **tous** les exportateurs, y compris pour leurs propres produits (constat E-1). | Proposé |
 | S-39 | En Modèle A, le Trade fige **deux jeux de termes** : les termes acheteur (prix final) et les termes fournisseur (prix net). Chaque audience ne reçoit que les siens. Quels objets du Trade sont partagés et lesquels restent bilatéraux avec MadaSource : Q-82. | Proposé (Q-01, Q-82) |
 | S-40 | Les **Payment Records sont orientés** : acheteur → MadaSource et MadaSource → exportateur en Modèle A ; acheteur → exportateur en Modèle B. Chaque justificatif hérite de l'audience de son paiement (Q-54, Q-82). | Proposé |
@@ -150,7 +152,7 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 | ID | Décision | Statut |
 |---|---|---|
 | S-22 | Coordonnées bancaires **chiffrées au niveau applicatif** par une bibliothèque cryptographique maintenue, clé hors de la base. Lecture intégrale réservée à l'organisation propriétaire et à l'ensemble de permissions « données bancaires », sur action explicite et auditée. Affichage masqué par défaut. | Proposé (Q-81) |
-| S-44 | **Modification sous contrôle renforcé** : permission dédiée, ré-authentification (S-35), notification à tous les membres de l'organisation, re-vérification par MadaSource avant prise d'effet, délai de prise d'effet. Le même régime s'applique aux coordonnées bancaires de **MadaSource** dans les paramètres. Modalités : Q-87 (constat E-4). | Proposé |
+| S-44 | **Modification sous contrôle renforcé** : permission dédiée, ré-authentification (S-35), notification à tous les membres de l'organisation, re-vérification par MadaSource avant prise d'effet, délai de prise d'effet. Le même régime s'applique aux coordonnées bancaires de **MadaSource**, qui sont les comptes de réception détenus par `payment_records` (ce module les présente à l'acheteur selon Q-55, sans lecture montante). Modalités : Q-87 (constat E-4). | Proposé (Q-87) |
 | S-23 | Coordonnées à présenter à l'acheteur pour un virement (MadaSource ou exportateur) : décision commerciale et juridique. | À VALIDER (Q-55) |
 
 ## 8. Intégrité des transactions
@@ -166,7 +168,7 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 
 | ID | Décision | Statut |
 |---|---|---|
-| S-24 | Chaque document **et chaque version** porte une **audience explicite**, vérifiée en plus de l'accès au contexte. La participation au contexte ne suffit pas. Valeur par défaut : la plus restrictive (organisation déposante et MadaSource). Exemple : une facture de l'exportateur à MadaSource en Modèle A révèle le prix net et ne doit jamais être servie à l'acheteur. | Proposé |
+| S-24 | Chaque document **et chaque version** porte une **audience explicite**, vérifiée en plus de l'accès au contexte. La participation au contexte ne suffit pas. Valeur par défaut : la plus restrictive (organisation déposante et MadaSource). Exemple : une facture de l'exportateur à MadaSource en Modèle A révèle le prix net et ne doit jamais être servie à l'acheteur. Valeurs de visibilité d'un document ou d'un texte libre : `owner` (organisation déposante et MadaSource), `buyer_side`, `exporter_side`, `parties` (les deux côtés), `internal` (MadaSource seulement). Elles se traduisent en audiences de lecture (S-29) via P-01. | Proposé |
 | S-24 | Catégories **jamais publiques** : documents de société, de paiement, fiscaux, bancaires, et documents d'onboarding exportateur (ces derniers ne sont jamais partagés, constat F-5). Qui fixe l'audience, valeurs par défaut par catégorie, validation admin avant partage : Q-83. | Proposé |
 | S-24 | Le retrait d'un partage est possible sans suppression, et audité. Les listes de documents sont filtrées par audience, avec des noms affichés nettoyés : l'existence d'un document invisible n'est jamais révélée. Un document généré par la plateforme (quotation, facture, récapitulatif) est rendu **pour chaque audience**. | Proposé |
 | S-45 | Rattacher un document à un message, un litige, un TradeEvent ou un paiement exige le **droit de le partager** avec l'audience cible. | Proposé |
@@ -189,8 +191,8 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 |---|---|---|
 | S-48 | **Identité de l'acteur** dans les historiques et les documents, rendue selon l'audience :<br>- libellé d'organisation selon Q-27 ;<br>- nom d'un utilisateur visible seulement au sein de sa propre organisation ;<br>- « MadaSource » pour un admin ;<br>- jamais d'email (constat M-6). | Proposé |
 | S-49 | Les **raisons du matching** sont produites dans la projection du lecteur : critère satisfait ou non, jamais la valeur privée d'un tiers, comme « capacité : 12 t » montrée à l'acheteur. Visibilité : Q-31 (constat M-4). | Proposé |
-| S-50 | **Projection de la RFQ pour l'exportateur destinataire** : liste fermée de champs (prix cible, préférence de paiement, port, exigences…). Q-85 (constat M-3). | Proposé |
-| S-51 | **Profil public exportateur** en liste blanche. Le CdC §61 ne rend publics que le nom, les produits, la vérification, la localisation générale et les certifications. Pour le reste du §7 (capacité, taux de litige…) et pour un seuil d'activité minimal avant d'afficher un indicateur (sur un seul Trade, « 100 % de litiges » révèle un fait privé) : Q-86 (constat M-2). | Proposé |
+| S-50 | **Projection de la RFQ pour l'exportateur destinataire** : liste fermée de champs (prix cible, préférence de paiement, port, exigences…), à fixer (constat M-3). | À VALIDER (Q-85) |
+| S-51 | **Profil public exportateur** en liste blanche. Le CdC §61 ne rend publics que le nom, les produits, la vérification, la localisation générale et les certifications. Pour le reste du §7 (capacité, taux de litige…) et pour un seuil d'activité minimal avant d'afficher un indicateur (sur un seul Trade, « 100 % de litiges » révèle un fait privé) : Q-86 (constat M-2). | À VALIDER (Q-86) |
 
 ## 12. Notifications
 
@@ -202,7 +204,7 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 
 | ID | Décision | Statut |
 |---|---|---|
-| S-53 | Les champs couverts par une vérification (raison sociale, immatriculation…) sont gelés, ou bien leur modification renvoie la vérification en revue, avec badge suspendu (Q-90, constat M-11). | Proposé |
+| S-53 | Les champs couverts par une vérification (raison sociale, immatriculation…) sont gelés, ou bien leur modification renvoie la vérification en revue, avec badge suspendu (constat M-11). Dans les deux cas, ils ne se modifient **que par `exporters`**, qui orchestre la remise en revue, et jamais par `/organizations/current`. | À VALIDER (Q-90) |
 | S-54 | Un slug de Passport n'est **jamais réattribué** : des QR codes imprimés y pointent. Une référence lisible (`MST-…`) n'est jamais une clé d'accès sans contrôle. Les références séquentielles révèlent le volume d'activité : à faire accepter ou non (Q-37) (constat F-3). | Proposé |
 
 ## 14. Validation des entrées et injections
@@ -221,7 +223,7 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 |---|---|---|
 | — | Limites de débit sur : connexion, rafraîchissement, inscription, réinitialisation, renvoi de vérification, création de RFQ, propositions de négociation, messages, dépôts, recherche publique (CdC §60). Clés : IP et compte pour la connexion ; utilisateur ailleurs. | Proposé |
 | — | Emplacement : reverse proxy (limites grossières) et application (limites fines). Avec plusieurs instances, un stockage partagé (Redis) est nécessaire et doit être justifié au Jour 8. | À VALIDER (Jour 8) |
-| S-55 | **Quotas métier** par organisation et par statut de compte (Q-11) : nombre de RFQ, plafond de destinataires par RFQ (Q-30). Les RFQ jugées abusives sont exclues des indicateurs de performance des exportateurs (constat M-13). | Proposé |
+| S-55 | **Quotas métier** par organisation et par statut de compte (Q-11) : nombre de RFQ, plafond de destinataires par RFQ (Q-30). Les RFQ jugées abusives sont exclues des indicateurs de performance des exportateurs (constat M-13). | Proposé ; seuils À VALIDER (Q-30, Q-86) |
 | — | Pagination bornée, taille maximale des requêtes, délai d'exécution maximal des requêtes SQL, 429 avec `Retry-After`. | Proposé |
 
 ## 16. Transport, en-têtes et configuration
@@ -239,8 +241,8 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 | Règle | Statut |
 |---|---|
 | Secrets uniquement dans les variables d'environnement ou le gestionnaire de secrets de l'hébergeur (Q-79). Jamais dans Git, une image Docker, un journal ou la configuration CI en clair. | Retenu (RJ section 1) |
-| **Aucun `.gitignore` aujourd'hui**, alors que le dépôt est poussé sur GitHub (R-20) : à créer avant tout `.env`, au plus tard au Jour 4. | Retenu |
-| Le cahier des charges est versionné et poussé sur le dépôt distant (commit c6e27d8). Vérifier que ce dépôt est **privé** (R-26, Q-71). Retirer le document de l'historique serait une opération destructive : seulement avec l'accord explicite de l'utilisateur, et sans effet sur les clones existants. | À VALIDER |
+| Le `.gitignore` de l'utilisateur (depuis le commit 182c6c9) **ne couvre pas `.env`** ni les environnements virtuels (R-20) : à compléter avant tout `.env`, au plus tard au Jour 4. | Proposé |
+| Le cahier des charges est versionné et poussé sur le dépôt distant. `CLAUDE.md`, `roadmap.md` et `roadmap_backend_fastapi.md` ont été retirés de l'index le 2026-10-12 (commit f598049), mais ils restent dans l'**historique** poussé (commit c6e27d8). Vérifier que ce dépôt est **privé** (R-26, Q-71). Retirer des fichiers de l'historique serait une opération destructive : seulement avec l'accord explicite de l'utilisateur, et sans effet sur les clones existants. | À VALIDER |
 | Procédure de rotation documentée (Audit D). Une rotation de la clé de signature invalide les jetons en cours ; la rotation de la clé de chiffrement bancaire impose un rechiffrement (Q-81). | Proposé |
 | Détection de secrets : hook local (`guard_files.py`) et analyse en CI (outil à justifier au Jour 7). Contrôle CI : aucun `.env` suivi. | Proposé |
 
@@ -286,7 +288,7 @@ En plus de la matrice obligatoire et des contrôles de non-exposition de [testin
 | `test_public_filter_on_hidden_price_rejected`, `test_counteroffer_error_contains_no_amount` | E-9, S-20, S-42 |
 | `test_demo_references_distinct_prefix`, `test_demo_payload_flagged` | E-10, S-57 |
 | `test_accept_stale_version_returns_409` | E-11, S-43 |
-| `test_notification_rendered_with_reader_projection` | M-10, S-52 |
+| `test_notification_holds_only_type_and_reference`, `test_notification_hidden_after_membership_removed` | M-10, S-52 |
 | `test_org_cannot_quote_on_own_rfq` | F-2, S-36 |
 | `test_register_existing_email_same_response` | F-4, S-56 |
 

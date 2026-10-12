@@ -16,7 +16,7 @@ CLAUDE.md                      règles permanentes, chargées à chaque session
 └── tests/test_hooks.py        auto-test des hooks
 ```
 
-> **Versionnement (constaté le 2026-10-12)** : le `.gitignore` de l'utilisateur exclut `CLAUDE.md` et les deux roadmaps. Le dossier `.claude/` (agents, skills, règles, hooks, settings) reste versionné. Une copie fraîche du dépôt n'aura donc pas `CLAUDE.md` : ses règles permanentes doivent être transmises autrement si d'autres personnes travaillent sur le projet.
+> **Versionnement (constaté le 2026-10-12)** : le `.gitignore` de l'utilisateur exclut `CLAUDE.md` et les deux roadmaps. Ils ont été retirés de l'index (commit f598049), mais restent présents dans l'historique poussé (commit c6e27d8). Le dossier `.claude/` (agents, skills, règles, hooks, settings) reste versionné. Une copie fraîche du dépôt n'aura donc pas `CLAUDE.md` : ses règles permanentes doivent être transmises autrement si d'autres personnes travaillent sur le projet.
 
 Principe de répartition :
 - `CLAUDE.md` : ce qui s'applique toujours, en quelques lignes.
@@ -73,10 +73,10 @@ Claude peut aussi activer un skill de lui-même quand sa description correspond 
 |---|---|---|
 | `backend-python.md` | `backend/app/**/*.py` | Couches, dépendances inter-modules par niveau et ports, DTO entre modules, transactions (commit par le cas d'usage), verrous (`FOR NO KEY UPDATE`), schéma par audience, erreurs, SQLAlchemy async, Pydantic v2, Decimal, UTC, statuts, logs |
 | `alembic-migrations.md` | `backend/alembic/**`, `backend/alembic.ini` | Migrations immuables, opérations destructrices, downgrade |
-| `tests.md` | `backend/tests/**` | Structure (dont `e2e/`), base éphémère, cas obligatoires, interdits |
-
-Les skills `fastapi-module` et `secure-api` ont été alignés au Jour 2 sur les conventions d'architecture et de sécurité : audiences, permissions `<ressource>:<action>`, DTO, verrous, projections.
+| `tests.md` | `backend/tests/**` | Structure (dont `e2e/`), base éphémère, machines d'état testées exhaustivement, cas obligatoires, interdits |
 | `documentation.md` | `docs/**` | Traçabilité CdC, `À VALIDER`, séparation V1/futur |
+
+Les skills `fastapi-module` et `secure-api` ont été alignés au Jour 2 sur les conventions d'architecture et de sécurité : audiences, permissions `<ressource>:<action>`, DTO, projections, verrous, routers des modules de niveau 1 à 3 dans `api/v1/endpoints/`.
 
 ## 5. Hooks
 

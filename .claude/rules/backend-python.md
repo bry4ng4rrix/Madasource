@@ -6,7 +6,7 @@ paths:
 # Règles pour le code applicatif Python (backend/app)
 
 - Couches : `router.py` (HTTP mince) → `service.py` (métier, transactions) → `repository.py` facultatif → `models.py`. Un service ne lève pas d'`HTTPException` : il lève des exceptions métier, traduites en HTTP par le gestionnaire central.
-- Inter-modules : importer uniquement le service public ou les schémas exportés d'un module de **niveau inférieur** (`docs/backend/module-boundaries.md` §3), jamais ses modèles internes ni son repository. Un appel vers un niveau supérieur passe par un port déclaré (§5.2). Pas de `relationship()` entre modules.
+- Inter-modules : importer uniquement `service`, `contracts` ou `projections` d'un module de **niveau inférieur** (`docs/backend/module-boundaries.md` §3). Jamais ses modèles, son repository ni ses schémas HTTP. Un appel vers un niveau supérieur passe par un port déclaré (§5.2). Pas de `relationship()` entre modules.
 - Transactions : seule la fonction de cas d'usage appelée par le router fait le commit, avant de retourner. Une fonction exposée aux autres modules ne fait jamais de commit (`docs/backend/architecture.md`, D-08).
 - Erreurs : lever les exceptions de `app/core/exceptions.py`, au format de `docs/backend/error-handling.md`.
 - Retours inter-modules : DTO immuables (`contracts.py`), jamais d'objet ORM ni de schéma HTTP. L'acteur est le type `Actor` de `common` (D-31).

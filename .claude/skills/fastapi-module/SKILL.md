@@ -33,16 +33,19 @@ Module visé : $ARGUMENTS
    - Seul le cas d'usage appelé par le router fait le commit (D-08).
    - Transitions : verrou `FOR NO KEY UPDATE` avec `populate_existing`, parent avant toute insertion fille, ordre des niveaux (D-09).
 7. **`contracts.py`** : DTO immuables renvoyés aux autres modules, jamais d'objet ORM ni de schéma HTTP (D-31). Seulement si d'autres modules appellent celui-ci.
-8. **`repository.py`** : seulement si des requêtes sont réutilisées ou complexes. `get_for_actor` et `list_for_actor` appliquent la politique ; un accès non filtré porte un nom explicite (S-14). Les lectures publiques ou transverses sont publiées comme **projections** (`Select` limité aux colonnes autorisées), sans modèles d'un autre module ([module-boundaries.md](../../../docs/backend/module-boundaries.md) §6).
-9. **Router** : le router instancie explicitement le schéma de l'audience retournée par la politique, jamais une union de schémas (D-32).
-8. **`router.py`** : endpoints minces (dépendances d'auth et de permission, appel du service), `response_model` et codes HTTP explicites, pagination sur les listes. Enregistrer le router dans `app/api/v1/router.py`.
-9. **Migration** : skill `database-migrations`.
-10. **Tests** (directement ou via l'agent `test-engineer`) :
+8. **`repository.py`** : seulement si des requêtes sont réutilisées ou complexes. `get_for_actor` et `list_for_actor` appliquent la politique ; un accès non filtré porte un nom explicite (S-14).
+9. **`projections.py`** : seulement si le module publie des lectures publiques ou transverses (pour `marketplace` ou `admin`). Ce sont des fonctions qui renvoient un `Select` limité aux colonnes et conditions autorisées. C'est la seule exception déclarée à D-31 ([module-boundaries.md](../../../docs/backend/module-boundaries.md) §6). Ce fichier fait partie de l'interface publique ; `repository.py` n'en fait pas partie.
+10. **`router.py`** : endpoints minces (dépendances d'authentification et de permission, appel du service), codes HTTP explicites, pagination sur les listes.
+    - Le router instancie **explicitement** le schéma de l'audience retournée par la politique. Jamais de `response_model` en union de schémas d'audiences différentes (D-32).
+    - Enregistrer le router dans `app/api/v1/router.py`.
+    - Pour les modules de niveau 1 à 3 (`audit`, `auth`, `organizations`), le router est placé dans `app/api/v1/endpoints/` ([module-boundaries.md](../../../docs/backend/module-boundaries.md) §4).
+11. **Migration** : skill `database-migrations`.
+12. **Tests** (directement ou via l'agent `test-engineer`) :
     - `unit/` : service, transitions ;
     - `integration/` : contraintes ;
-    - `api/` : 401, 403, autre organisation, succès, non-exposition des champs privés.
-11. **Documentation** : skill `api-documentation`, documents `docs/backend/` du module, `.env.example` si une variable est ajoutée.
-12. **Vérifications** : skill `pytest-workflow` en mode complet sur le module.
+    - `api/` : 401, 403, autre organisation, succès, ensemble exact des clés de chaque projection.
+13. **Documentation** : skill `api-documentation`, documents `docs/backend/` du module, `.env.example` si une variable est ajoutée.
+14. **Vérifications** : skill `pytest-workflow` en mode complet sur le module.
 
 ## Vérifications obligatoires
 

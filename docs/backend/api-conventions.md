@@ -16,7 +16,7 @@ Erreurs : [error-handling.md](error-handling.md). Sécurité : [security-design.
 | Règle | Statut |
 |---|---|
 | Préfixe unique `/api/v1` (RJ section 1). | Retenu |
-| Changements autorisés dans `v1` : ajout d'un endpoint, ajout d'un champ de réponse, ajout d'un paramètre facultatif, ajout d'une valeur d'énumération documentée. | Proposé |
+| Changements autorisés dans `v1` : ajout d'un endpoint, ajout d'un champ de réponse, ajout d'un paramètre facultatif, ajout d'une valeur d'énumération documentée. Pour que ce dernier cas ne casse pas les clients générés, les énumérations de **réponse** sont déclarées extensibles : un client doit tolérer une valeur inconnue et l'afficher de façon générique. | Proposé |
 | Un changement cassant passe par `/api/v2` : suppression ou renommage d'un champ, changement de type ou de sens, nouveau champ obligatoire en entrée, refus d'une requête jusque-là valide. | Proposé |
 | Un endpoint déprécié est signalé dans l'OpenAPI et par les en-têtes `Deprecation` et `Sunset`. | Proposé |
 
@@ -24,11 +24,12 @@ Erreurs : [error-handling.md](error-handling.md). Sécurité : [security-design.
 
 Domaines du CdC §56, rattachés aux modules ([module-boundaries.md](module-boundaries.md)). Les chemins sont proposés ; les chemins définitifs sont fixés au jour d'implémentation de chaque module.
 
-| CdC §56 | Chemins proposés (sous `/api/v1`) | Module | Audience |
+| CdC §56 | Chemins proposés (sous `/api/v1`) | Module | Acteurs |
 |---|---|---|---|
-| `/auth` | `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/email-verification`, `/auth/password-reset` | auth | public / authentifié |
-| `/users` | `/users/me` | auth | authentifié |
-| `/organizations` | `/organizations/current`, `/organizations/current/members` (Q-10) | organizations | membre |
+| `/auth` | `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/email-verification`, `/auth/password-reset` | auth (router dans `api/v1/endpoints/`) | public / authentifié |
+| `/users` | `/users/me` | auth (router dans `api/v1/endpoints/`) | utilisateur courant |
+| `/organizations` | `/organizations/current` | organizations (router dans `api/v1/endpoints/`) | membre |
+| — | `/organizations/current/members` (Q-10) | access_control | membre habilité |
 | `/buyers` | `/buyers/registrations` (inscription), `/buyers/me` | buyers | public / acheteur |
 | `/exporters` | `/exporters/registrations`, `/exporters/me` | exporters | public / exportateur |
 | — | `/verifications` (demandes de l'exportateur), `/admin/verifications` | verification | exportateur / admin |
@@ -52,6 +53,8 @@ Domaines du CdC §56, rattachés aux modules ([module-boundaries.md](module-boun
 | `/analytics` | `/admin/analytics` | admin (Q-62) | admin |
 | — | `/health/live`, `/health/ready` | `api/v1/endpoints/health.py` | technique |
 
+La colonne « Acteurs » indique qui peut appeler le chemin. La vue servie dépend de l'**audience** (codes de S-29, section 13). Les routers d'`audit`, `auth` et `organizations` sont placés dans la couche HTTP `api/v1/endpoints/` ([module-boundaries.md](module-boundaries.md) §4).
+
 Écarts de nommage avec le CdC §56, proposés et à valider :
 - `/messages` devient `/conversations`, car les messages sont rattachés à une conversation ;
 - la lecture publique est regroupée sous `/marketplace`, pour séparer nettement les schémas publics des schémas privés ;
@@ -68,7 +71,7 @@ Les chemins sont en minuscules, avec un tiret entre les mots (`rfq-inbox`). Les 
 | Lire | `GET /ressources/{id}` | 200 |
 | Modifier partiellement | `PATCH /ressources/{id}` (champs modifiables seulement) | 200 et ressource |
 | Action métier | `POST /ressources/{id}/<verbe>` : `submit`, `cancel`, `publish`, `unpublish`, `archive`, `decline`, `accept`, `reject`, `confirm` | 200 et ressource dans son nouvel état |
-| Transition générique (machines à nombreux états : Trade, expédition) | `POST /trades/{id}/transitions` avec `{"to_status": "...", "comment": "..."}` ; `GET /trades/{id}/transitions` liste les transitions permises à l'acteur | 200 |
+| Transition générique (machines à nombreux états : Trade, expédition) | `POST /trades/{id}/transitions` avec `{"to_status": "...", "comment": "...", "comment_visibility": "parties"}`. La visibilité du commentaire est obligatoire si un commentaire est fourni (S-47) : `parties`, `buyer_side`, `exporter_side` ou `internal` (S-24). `GET /trades/{id}/transitions` liste les transitions permises à l'acteur. | 200 |
 | Supprimer | `DELETE /ressources/{id}`, seulement si la suppression est autorisée par les règles (rare : archivage logique privilégié, BR-PRD-05) | 204 |
 
 - `PUT` n'est pas utilisé.
@@ -90,7 +93,7 @@ Les chemins sont en minuscules, avec un tiret entre les mots (`rfq-inbox`). Les 
 | `id` : UUID technique. `reference` : identifiant lisible (`RFQ-…`, `MSQ-…`, `MST-…`). | Proposé |
 | Horodatages `created_at`, `updated_at`, `expires_at`… ; booléens préfixés `is_` ou `has_`. | Proposé |
 | Ressource unique renvoyée sans enveloppe. Listes : enveloppe de pagination (section 6). | Proposé |
-| Les schémas d'entrée refusent les champs inconnus (`extra="forbid"`) : un champ réservé au serveur (`status`, `organization_id`, marge…) est rejeté en 422. | Retenu (skill `secure-api`) |
+| Les schémas d'entrée refusent les champs inconnus (`extra="forbid"`) : un champ réservé au serveur (`status`, `organization_id`, marge…) est rejeté en 422. | Proposé (S-38) |
 
 ## 6. Pagination, tri et filtres
 
@@ -206,7 +209,7 @@ Les libellés affichés (en anglais ou en français) sont produits par le fronte
 |---|---|
 | Schéma servi sous `/api/v1/openapi.json`, documentation interactive sous `/api/v1/docs`, en local, en test et en staging. **Désactivés en production publique** ; les routes admin n'apparaissent dans aucun schéma public ([security-design.md](security-design.md) §16). | Proposé |
 | Un tag par module ; `operationId` unique et stable au format `<module>_<action>` (exemple : `rfqs_submit`), pour la génération de clients. | Proposé |
-| Noms de schémas : `<Entité><Audience><Usage>`, avec les audiences de S-29 : `Public`, `Buyer`, `ExporterOwner`, `ExporterRecipient`, `Admin`, `AdminFinance`. Exemples : `ProductPublicRead`, `RFQBuyerRead`, `RFQExporterRecipientRead`, `QuotationBuyerRead`, `QuotationExporterOwnerRead`, `QuotationAdminFinanceRead`. Chaque schéma hérite de la **classe de base de son audience**, ce qui permet le contrôle statique de [testing-strategy.md](testing-strategy.md#7-non-exposition-des-données-sensibles). | Proposé (C27) |
+| Noms de schémas : `<Entité><Audience><Usage>`. Correspondance entre les codes d'audience de S-29 et les suffixes : `public` → `Public`, `buyer` → `Buyer`, `exporter_owner` → `ExporterOwner`, `exporter_recipient` → `ExporterRecipient`, `madasource` → `Admin`, `madasource_finance` → `AdminFinance`, `self` → `Self`. Exemples : `ProductPublicRead`, `RFQBuyerRead`, `RFQExporterRecipientRead`, `QuotationBuyerRead`, `QuotationExporterOwnerRead`, `QuotationAdminFinanceRead`. Chaque schéma hérite de la **classe de base de son audience**, ce qui permet le contrôle statique de [testing-strategy.md](testing-strategy.md#7-non-exposition-des-données-sensibles). | Proposé (C27) |
 | **Sélection du schéma** : la politique d'accès renvoie l'audience et le router instancie explicitement le schéma correspondant. Jamais de `response_model` en union résolue automatiquement : depuis Pydantic 2.8, la validation d'une union retient le membre qui valide le plus de champs, donc potentiellement le schéma admin. Un chemin par audience quand c'est possible (D-32). | Proposé (C16) |
 | Chaque endpoint documente ses erreurs possibles (codes de [error-handling.md](error-handling.md)) et des exemples **fictifs** (domaines `example.com`, sociétés inventées). | Proposé |
 

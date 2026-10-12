@@ -152,7 +152,7 @@ Le CdC §77 demande 22 éléments au prestataire. Ce dépôt couvre la partie te
 | # | Élément (CdC §77) | Traitement |
 |---|---|---|
 | 1 | Technical architecture | Jour 2 (`architecture.md`) |
-| 2 | Recommended technology stack | `CLAUDE.md` et roadmap backend ; justification au Jour 2 |
+| 2 | Recommended technology stack | Roadmap backend ; justification : [architecture.md](architecture.md#14-justification-de-la-stack) §14 |
 | 3 | Frontend architecture | Hors de ce dépôt (backend uniquement) |
 | 4 | Backend architecture | Jour 2 |
 | 5 | Database architecture | Jour 3 |

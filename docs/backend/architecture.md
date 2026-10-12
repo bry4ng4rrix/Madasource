@@ -1,6 +1,8 @@
 # Architecture du backend MadaSource
 
-Jour 2 · 2026-10-12 · Statut : proposition à valider. Révisée après les revues `backend-architect` et `security-auditor` du Jour 2 (constats « C-NN » de l'architecte, section 13).
+Jour 2 · 2026-10-12 · Statut : proposition à valider. Révisée après les revues `backend-architect` et `security-auditor` et la revue finale du Jour 2.
+
+Notation des constats : « C1 » à « C35 » renvoient à la revue d'architecture (section 13). « C-1 », « E-1 », « M-1 », « F-1 »… renvoient à la relecture de sécurité ([security-design.md](security-design.md#22-relecture-de-sécurité-du-jour-2)). C1 et C-1 sont deux constats différents.
 
 Documents liés :
 - [module-boundaries.md](module-boundaries.md) : frontières et dépendances entre modules ;
@@ -13,8 +15,9 @@ Spécification fonctionnelle : documents du Jour 1 ([requirements.md](requiremen
 
 Chaque décision porte un identifiant **D-NN** et un statut :
 - **Retenu** : imposé par une source (CdC, roadmap) ;
-- **Proposé** : choix technique argumenté, à confirmer ;
-- **À VALIDER** : dépend d'une question ouverte.
+- **Proposé** : proposition argumentée de l'équipe, à confirmer avant implémentation. « Proposé (Q-NN) » signifie que la proposition attend la réponse du client à la question Q-NN ;
+- **À VALIDER** : aucune proposition n'est retenue, la décision revient au client ou à un jour ultérieur.
+
 Registre complet : section 12.
 
 ## 1. Contexte et principes
@@ -62,7 +65,7 @@ backend/app/
 ├── main.py              application factory : configuration, middlewares, routers, appel de wiring (aucune logique métier)
 ├── wiring.py            branchement des ports P-01 et P-03 et de leurs valeurs par défaut (composition root)
 ├── api/v1/router.py     agrège les routers des modules actifs sous /api/v1
-├── api/v1/endpoints/    endpoints techniques hors modules : santé (health.py)
+├── api/v1/endpoints/    couche HTTP hors modules : santé (health.py) et routers des modules de niveau 1 à 3 (audit, auth, organizations)
 ├── core/                configuration, journalisation, primitives de sécurité, exceptions, feature flags, codes de catégories
 ├── db/                  base déclarative, session, conventions de nommage, tables techniques (compteurs D-16)
 ├── common/              noyau sans règle métier : Money, Quantity, Clock, Actor, pagination, identifiants, codes de référence
@@ -81,6 +84,7 @@ Contenu type d'un module :
 | `schemas.py` | Schémas HTTP Pydantic, un par audience (S-29) | Oui |
 | `service.py` | Cas d'usage et règles métier, transitions d'état, transactions, audit | Oui |
 | `contracts.py` | DTO immuables renvoyés aux autres modules, distincts des schémas HTTP (D-31) | Si le module est appelé par d'autres |
+| `projections.py` | Requêtes de lecture publiées (`Select` limité aux colonnes et conditions autorisées) pour `marketplace` et `admin` : exception déclarée à D-31 ([module-boundaries.md](module-boundaries.md) §6) | Si le module publie des lectures publiques ou transverses |
 | `models.py` | Modèles SQLAlchemy du module | Si le module possède des tables |
 | `repository.py` | Requêtes ; `get_for_actor` et `list_for_actor` appliquent la politique d'accès. Les accès non filtrés (Système, admin) portent un nom explicite (S-14). | Si utile |
 | `permissions.py` | Politique d'accès (acteur, action, ressource) → audience ou refus (S-28), et permissions nommées | Si le module a des endpoints privés |
@@ -113,12 +117,12 @@ Aucun fichier vide n'est créé pour un module futur (RJ section 2).
 | D-08 | Seule la fonction de cas d'usage appelée par le router **valide**, avant de retourner. Les fonctions exposées aux autres modules ne valident jamais et renvoient des **DTO immuables**, jamais des objets ORM qu'un appelant pourrait modifier (D-31). | Proposé (C15) |
 | D-08 | Les repositories ne valident jamais. `expire_on_commit=False`. Les horodatages sont fixés par l'application (horloge injectable), pas par des valeurs par défaut du serveur : une colonne calculée par le serveur resterait expirée après validation, et sa lecture déclencherait une requête implicite qui échoue en asynchrone. À défaut : `eager_defaults=True`. | Proposé (C20) |
 | D-08 | Jamais d'exécution concurrente (`asyncio.gather`) sur la session de la requête. | Proposé (C19) |
-| D-29 | **Écritures qui doivent survivre à un refus** : révocation d'une session sur rejeu d'un jeton, compteurs d'échecs de connexion, événements d'audit de sécurité. Elles passent par une **unité de travail dédiée** (seconde session de la même fabrique, validée indépendamment) via une fonction unique `record_security_event`. Jamais par des « commit puis raise » dispersés. | Proposé (C2) |
+| D-29 | **Écritures qui doivent survivre à un refus** : révocation d'une session sur rejeu d'un jeton, compteurs d'échecs de connexion, événements d'audit de sécurité. Jamais par des « commit puis raise » dispersés. Mécanisme :<br>1. Le cas d'usage **enregistre l'effet** dans une liste propre à la requête, puis lève son exception.<br>2. La dépendance de session **annule d'abord** la transaction principale, ce qui libère ses verrous.<br>3. Elle exécute ensuite les effets dans une **nouvelle transaction**, validée seule.<br><br>Pourquoi annuler d'abord : une seconde session qui écrirait pendant que la transaction principale garde ses verrous attendrait jusqu'au `lock_timeout`, et l'effet serait perdu. Chaque effet est fourni par le module propriétaire des données : `auth` pour les sessions et les compteurs, `audit` pour les événements. Le socle (`db`) ne fournit que l'outil d'exécution. En test, cette transaction est un point de sauvegarde distinct sur la connexion de test, après l'annulation de celui de la requête ([testing-strategy.md](testing-strategy.md#4-base-de-données-de-test)). | Proposé (C2) |
 | D-09 | **Transitions d'état** : verrouillage de la ligne de l'agrégat en `FOR NO KEY UPDATE` (`with_for_update(key_share=True)` en SQLAlchemy), avec `populate_existing`, puis revérification de l'état. `FOR NO KEY UPDATE` n'entre pas en conflit avec le `FOR KEY SHARE` que PostgreSQL prend lors du contrôle d'une clé étrangère à l'insertion d'une ligne fille. `FOR UPDATE` provoquerait des interblocages entre deux exportateurs qui répondent à la même RFQ. `populate_existing` garantit que l'état revérifié est celui de la ligne relue, et non celui d'un objet déjà en mémoire. | Proposé (C3, C4) |
 | D-09 | **Ordre de verrouillage**, règle générale :<br>1. lecture sans verrou ;<br>2. verrouillage dans l'ordre croissant des niveaux de modules (RFQ → quotation → négociation → Trade → Payment Record / expédition) ;<br>3. le parent est toujours verrouillé avant toute insertion d'une ligne fille ;<br>4. le compteur de références en dernier ;<br>5. revérification. | Proposé (C18) |
 | D-09 | **Idempotence** des actions critiques : contrôle d'état sous verrou et contrainte d'unicité en dernier rempart. Un second appel identique renvoie le résultat existant ; un appel contradictoire reçoit 409. `Idempotency-Key` : non requis en V1. | Proposé |
 | D-09 | Interblocage (`40P01`), conflit de sérialisation (`40001`) ou attente de verrou expirée (`55P03`) : 409 `CONCURRENT_MODIFICATION`, que le client peut retenter. Requête annulée par `statement_timeout` (`57014`) : 503. Pas de nouvelle tentative automatique côté serveur en V1. | Proposé (C21) |
-| D-16 | **Identifiants lisibles** (`RFQ-`, `MSQ-`, `MST-`) : table technique de compteurs du socle (`db`), une ligne par préfixe et par année, incrémentée par une seule instruction atomique dans la transaction de création, en dernier dans l'ordre de verrouillage. Unicité sous concurrence, remise à zéro annuelle, pas de trou en cas d'annulation. Les créations d'un même préfixe sont sérialisées. Format : Q-37. | Proposé |
+| D-16 | **Identifiants lisibles** (`RFQ-`, `MSQ-`, `MST-`) : table technique de compteurs du socle (`db`), une ligne par préfixe (et par année si la remise à zéro annuelle est retenue, Q-37), incrémentée par une seule instruction atomique dans la transaction de création, en dernier dans l'ordre de verrouillage. Unicité sous concurrence, pas de trou en cas d'annulation. Les créations d'un même préfixe sont sérialisées. Format : Q-37. | Proposé (Q-37) |
 
 ## 6. Configuration et environnements
 
@@ -162,7 +166,8 @@ Aucun fichier vide n'est créé pour un module futur (RJ section 2).
 | ID | Convention | Statut |
 |---|---|---|
 | D-12 | Journaux JSON sur la sortie standard. Champs : horodatage UTC, niveau, logger, message, `request_id`, méthode, chemin, statut, durée, et identifiants (jamais noms ni emails) de l'utilisateur et de l'organisation. Un seul journal d'accès : celui de l'application, ou celui du serveur ASGI, pas les deux. | Proposé |
-| D-12 | Nettoyage obligatoire : `Authorization`, cookies, `password`, `token`, `secret`, données bancaires, composantes de prix. Aucun corps de requête ou de réponse journalisé par défaut. | Retenu (RJ 5, RJ 10) |
+| D-12 | Nettoyage obligatoire : `Authorization`, cookies, `password`, `token`, `secret`, données bancaires. Aucun corps de requête ou de réponse journalisé par défaut. | Retenu (RJ 5, RJ 10) |
+| D-12 | Composantes de prix (prix net, marge, coûts, commission) absentes des journaux applicatifs. | Proposé (S-21) |
 | D-12 | Journal applicatif (exploitation) distinct du journal d'audit (métier, en base, ajout seul, Jour 12). | Retenu (RJ 12) |
 | D-12 | Module `logging` standard et un formateur JSON, sans dépendance. Branchement d'un service de suivi d'erreurs possible plus tard. | Proposé |
 
@@ -231,7 +236,7 @@ Classée V1 (A), mais prévue par aucun jour de la roadmap backend (SRC-18). Pla
 |---|---|---|---|
 | D-01 | Monolithe modulaire : une application FastAPI, une base PostgreSQL, un historique Alembic | Retenu | RJ section 1, CdC §70 (SRC-17) |
 | D-02 | API REST versionnée sous `/api/v1`, documentée par OpenAPI | Retenu | RJ section 1, CdC §56 |
-| D-03 | Structure RJ section 2 avec écarts déclarés : `integrations/`, `wiring.py`, `contracts.py`, `ports.py` (deux modules), santé dans `api/v1/endpoints/`, dossier `tests/e2e` | Proposé | C24 |
+| D-03 | Structure RJ section 2 avec écarts déclarés : `integrations/`, `wiring.py`, `contracts.py`, `projections.py`, `ports.py` (deux modules) ; santé et routers des modules de niveau 1 à 3 dans `api/v1/endpoints/` ; dossier `tests/e2e` | Proposé | C24, revue finale |
 | D-04 | Couches d'un module : router, schemas, service, contracts, repository, models, permissions | Retenu / Proposé | RJ section 1-2 |
 | D-05 | Modules ordonnés en niveaux, dépendances uniquement vers les niveaux inférieurs, contrôle automatique en CI | Proposé | [module-boundaries.md](module-boundaries.md) |
 | D-06 | Communication par appels descendants ; deux ports seulement (P-01, P-03) ; pas de bus d'événements en V1 | Proposé | C35 |
@@ -256,10 +261,10 @@ Classée V1 (A), mais prévue par aucun jour de la roadmap backend (SRC-18). Pla
 | D-25 | Objet hors périmètre de l'acteur : 404, comme un objet inexistant | Proposé | S-15 |
 | D-26 | Migrations appliquées comme étape de déploiement, jamais au démarrage | Proposé | Audit D |
 | D-27 | Python 3.14 recommandé (dernière stable, UUIDv7 natif, identique au poste), sous réserve de compatibilité des dépendances au Jour 4 ; sinon 3.13 ou 3.12 | À VALIDER (Jour 4) | RJ 4 |
-| D-28 | **Statut de compte porté par l'organisation** (`organizations`, niveau 3) : Pending, Active, Suspended, Blocked. `buyers` et `exporters` orchestrent les décisions en appelant `organizations`. L'utilisateur (`auth`) porte ses propres états (email vérifié, compte désactivé). | Proposé, à confirmer au Jour 3 | C1, Q-11, Q-12, Q-13 |
-| D-29 | Unité de travail dédiée aux écritures de sécurité qui doivent survivre à un refus | Proposé | C2 |
+| D-28 | **Statut de compte porté par l'organisation** (`organizations`, niveau 3), pour que l'acteur puisse être construit sans import montant. Valeurs :<br>- organisations acheteuses : statuts du CdC §10 (Pending, Active, Suspended, Blocked) ;<br>- organisations exportatrices : à définir (Q-12). Le CdC §36 prévoit Approve, Reject, Suspend et Reactivate, et un rejet n'a pas d'état cible dans la liste acheteur.<br><br>`buyers` et `exporters` orchestrent les décisions en appelant `organizations`. L'utilisateur (`auth`) porte ses propres états (email vérifié, compte désactivé). | Proposé (emplacement) / À VALIDER (statuts exportateur, Q-12), avant le Jour 3 | C1, Q-11, Q-12, Q-13 |
+| D-29 | Écritures de sécurité qui doivent survivre à un refus : enregistrées pendant la requête, exécutées après l'annulation de la transaction principale dans une transaction distincte, fournies par le module propriétaire (`auth`, `audit`) | Proposé | C2, revue finale |
 | D-30 | Codes stables pour catégories et référentiels ; métadonnées des catégories dans `products` ; tables techniques (compteurs, outbox) dans le socle | Proposé | C13, C14 |
-| D-31 | Contrats inter-modules : DTO immuables (`contracts.py`). L'acteur est défini dans `common` et construit par `access_control` : utilisateur, organisation, statut, permissions, session, instant d'authentification (S-35), acteur Système (S-58), intervention « pour le compte de » (S-32) | Proposé | C15 |
+| D-31 | Contrats inter-modules : DTO immuables (`contracts.py`). Seule exception : les projections de lecture (`projections.py`), qui renvoient une requête `Select` limitée aux colonnes autorisées. L'acteur est défini dans `common` et construit par `access_control` : utilisateur, organisation, statut, permissions, session (avec indicateur de second facteur), instant d'authentification (S-35), acteur Système (S-58), intervention « pour le compte de » (S-32) | Proposé | C15, revue finale |
 | D-32 | Choix explicite du schéma de réponse selon l'audience retournée par la politique ; jamais d'union de schémas résolue automatiquement par Pydantic (risque de servir le schéma admin) ; un chemin par audience quand c'est possible | Proposé | C16 |
 | D-33 | Un cas d'usage multi-modules appartient au module de plus haut niveau concerné. En particulier, l'acceptation (directe ou après négociation) est orchestrée par `trades`, sur un chemin unique. | Proposé | C26, C35 |
 
@@ -298,3 +303,30 @@ Relecture par l'agent `backend-architect`, en lecture seule, avec vérification 
 | C32 | Adaptateurs DEMO inexistants en V1 | D-18 |
 | C33 | Base de test | [testing-strategy.md](testing-strategy.md) |
 | C34 | Repository « toujours filtré » | Section 3 |
+
+**Revue finale** (skill `code-review-madasource`, agent `code-reviewer`). Elle a porté sur l'ensemble des documents du Jour 2 après ces corrections : 2 constats bloquants, 8 importants, 16 facultatifs, tous traités. Les principaux :
+- ordre de construction des modules ([module-boundaries.md](module-boundaries.md) §11, Q-93) ;
+- statut de S-18 ;
+- dépendances montantes implicites (favoris, gestion des membres, interventions admin, coordonnées bancaires de MadaSource) ;
+- exécution de D-29 après l'annulation ;
+- statuts harmonisés.
+
+Détail : [daily-reports/day-02.md](daily-reports/day-02.md).
+
+## 14. Justification de la stack
+
+Le CdC §77 (point 2) demande une recommandation de stack. La roadmap l'impose (RJ section 1) ; ce tableau en donne les raisons au regard des exigences de MadaSource.
+
+| Composant | Statut | Raisons |
+|---|---|---|
+| Python (version : D-27) | Retenu | Écosystème mature pour les API et les données ; typage statique vérifiable |
+| FastAPI | Retenu | API REST asynchrone ; validation des entrées par Pydantic ; schéma OpenAPI généré à partir du code (CdC §56, RJ 5) ; injection de dépendances adaptée aux contrôles d'accès par route |
+| Pydantic v2 | Retenu | Schémas distincts par audience ; refus des champs inconnus ; sérialisation exacte des `Decimal` en chaînes |
+| PostgreSQL | Retenu | Transactions ACID ; contraintes (CHECK, UNIQUE, clés étrangères) pour les invariants métier ; `NUMERIC` exact pour les montants ; verrous de ligne (`FOR NO KEY UPDATE`) pour les transitions concurrentes ; type JSON indexable envisageable pour les attributs variables par catégorie (Jour 3) |
+| SQLAlchemy 2.x (asynchrone) | Retenu | Requêtes typées, contrôle explicite des transactions et des verrous, compatibilité asyncio |
+| Alembic | Retenu | Migrations versionnées, relues, réversibles |
+| Pytest | Retenu | Fixtures adaptées aux bases de test isolées et aux tests paramétrés (machines d'état) |
+| Ruff | Retenu | Lint et formatage rapides, un seul outil |
+| Docker Compose | Retenu | Environnement reproductible (backend et PostgreSQL), aligné avec la CI |
+| uv | Proposé (Jour 4) | Verrouillage reproductible des dépendances ; gestion des versions de Python (3.12 et 3.14 déjà disponibles sur le poste) |
+| Redis, Celery | Non retenus au départ (D-20) | À introduire seulement si un besoin est démontré (Jour 31, limites de débit partagées au Jour 8) |

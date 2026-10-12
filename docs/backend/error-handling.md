@@ -80,7 +80,7 @@ Le catalogue s'enrichit module par module. Un code n'est jamais réutilisé avec
 | `INVALID_TOKEN` | 401 | Jeton illisible, signature invalide, expiré, révoqué, ou session révoquée | Pas de distinction fine renvoyée au client ; le motif est journalisé |
 | `INVALID_CREDENTIALS` | 401 | Échec de connexion | Réponse identique que le compte existe ou non (BR-ACC-05) |
 | `REAUTHENTICATION_REQUIRED` | 401 | Action sensible exigeant une authentification récente (S-35) | Le client redemande le mot de passe, et le second facteur s'il est actif |
-| `ACCOUNT_NOT_ACTIVE` | 403 | Statut de compte (Pending, Suspended, Blocked) qui ne permet pas l'action | Statut porté par l'organisation (D-28) ; droits : Q-11, Q-12 |
+| `ACCOUNT_NOT_ACTIVE` | 403 | Statut de compte de l'organisation qui ne permet pas l'action (acheteur : Pending, Suspended, Blocked ; exportateur : Q-12) | Statut porté par l'organisation (D-28) ; droits : Q-11, Q-12 |
 | `EMAIL_NOT_VERIFIED` | 403 | Action exigeant une adresse vérifiée | Q-13 |
 | `PERMISSION_DENIED` | 403 | Rôle ou permission insuffisant pour l'**action** sur un objet visible | Jamais pour un objet hors périmètre (voir `RESOURCE_NOT_FOUND`) |
 | `SEPARATION_OF_DUTIES` | 403 | L'admin qui a saisi un paiement tente de le confirmer ou de le rembourser (S-34) | |
@@ -138,7 +138,13 @@ Règles :
 
 Remarques :
 - La lecture du code SQLSTATE dépend du pilote retenu (asyncpg ou psycopg 3, D-10). Elle est isolée dans le socle.
-- **Réponses 500** : une exception non gérée remonte jusqu'au middleware d'erreur serveur de Starlette, en dehors des autres middlewares. Les en-têtes ajoutés par ceux-ci (`X-Request-ID`, CORS) manqueraient donc. Pour y remédier, l'identifiant de requête est placé dans une variable de contexte par un middleware ASGI pur, et le gestionnaire 500 le relit pour poser l'en-tête et le membre `request_id` (C31). À tester dès le Jour 5.
+- **Réponses 500** : une exception non gérée remonte jusqu'au middleware d'erreur serveur de Starlette, en dehors des autres middlewares. Les en-têtes ajoutés par ceux-ci (`X-Request-ID`, CORS) manqueraient donc, et un frontend d'une autre origine ne pourrait pas lire la réponse. Correctif proposé (C31, revue finale) :
+  - un middleware ASGI pur, placé à l'extérieur, place l'identifiant de requête dans l'état de la requête (`scope["state"]`) plutôt que dans une variable de contexte, qui pourrait être réinitialisée en sortie de middleware ;
+  - le gestionnaire 500 relit cet identifiant pour poser l'en-tête et le membre `request_id` ;
+  - il ajoute aussi les en-têtes CORS des origines autorisées.
+
+  À tester dès le Jour 5.
+- **Réponses 401** : toujours avec un en-tête `WWW-Authenticate: Bearer`, exigé par la RFC 9110 (§15.5.2). Pour `REAUTHENTICATION_REQUIRED`, l'en-tête porte `error="insufficient_user_authentication"`, défini par la RFC 9470 (authentification renforcée).
 - Dans tous les cas, la transaction du cas d'usage est annulée avant la réponse. Les seules écritures conservées sont celles de l'unité de travail de sécurité (D-29).
 
 ## 7. Règles de sécurité des messages
@@ -161,7 +167,7 @@ Remarques :
 | 401, 403, 429 répétés | `WARNING` | Mêmes champs, plus l'adresse IP, pour détecter les abus (Audit B) |
 | 5xx | `ERROR` | Trace complète, `request_id` |
 
-Les corps de requête ne sont jamais journalisés, et les filtres de nettoyage s'appliquent (D-12). Les refus de sécurité (accès à un objet d'une autre organisation, rejeu d'un jeton, échecs de connexion) sont aussi enregistrés comme **événements d'audit de sécurité**, par l'unité de travail dédiée, pour survivre à l'annulation (D-29, BR-AUD-05).
+Les corps de requête ne sont jamais journalisés, et les filtres de nettoyage s'appliquent (D-12). Les refus de sécurité (accès à un objet d'une autre organisation, rejeu d'un jeton, échecs de connexion) sont aussi enregistrés comme **événements d'audit de sécurité**, exécutés après l'annulation de la transaction principale (D-29, BR-AUD-05). Une tentative inter-organisations n'est distinguée d'un identifiant inexistant que par une lecture système limitée (existence et organisation de l'objet), limitée en débit, dont le résultat n'est jamais renvoyé au client (S-14).
 
 ## 9. Comportement attendu du client
 

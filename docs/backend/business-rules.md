@@ -6,6 +6,7 @@ Les règles ci-dessous sont des **invariants** que le backend doit garantir côt
 - **Défini** : écrit dans une source.
 - **Déduit** : tiré d'un exemple ou d'un croisement de sources ; à confirmer.
 - **À VALIDER** : à décider par le client (questions Q-NN dans [risks-and-open-questions.md](risks-and-open-questions.md)).
+- **Proposé** (règles ajoutées au Jour 2, marquées « (J2) ») : proposition de l'équipe, absente des sources. Comme toute décision `À VALIDER`, elle est soumise au client et ne s'implémente pas comme définitive sans validation. Quand une question Q-NN est citée, la proposition attend sa réponse.
 
 Les exemples chiffrés du CdC (USD 40/kg, marge de USD 3,30, validité de 7 jours…) sont **illustratifs** : aucun n'est une valeur par défaut à coder.
 
@@ -108,7 +109,7 @@ Les exemples chiffrés du CdC (USD 40/kg, marge de USD 3,30, validité de 7 jour
 | BR-PRC-08 | Un coût externe expiré n'est jamais utilisé silencieusement. Le calcul est bloqué, ou le prix est explicitement signalé comme fondé sur une donnée périmée. | CdC §33 | Défini (comportement exact : Q-04) |
 | BR-PRC-09 | Le prix net fournisseur, les coûts internes et la marge ne sont jamais exposés à l'acheteur. La marge n'est jamais exposée à l'exportateur. | CdC §61, RJ 24 | Défini |
 | BR-PRC-10 | Montants en Decimal/NUMERIC, jamais en float. Règles d'arrondi explicites. | RJ section 1 | Défini (précision : Q-08) |
-| BR-PRC-11 | (J2) **Non-déduction** : aucune audience ne reçoit une combinaison de valeurs permettant de recalculer une composante cachée. Exemple : l'exportateur, qui connaît son prix net, ne reçoit pas le prix final acheteur. Cela vaut aussi pour les totaux, paiements, remboursements, échantillons et tableaux de bord. Un champ public est visible de tous les exportateurs. | S-19 | Proposé |
+| BR-PRC-11 | (J2) **Non-déduction** : aucune audience ne reçoit une combinaison de valeurs permettant de recalculer une composante cachée. Exemple : l'exportateur, qui connaît son prix net, ne reçoit pas le prix final acheteur. Cela vaut aussi pour les totaux, paiements, remboursements, échantillons et tableaux de bord. Un champ public est visible de tous les exportateurs. | S-19 | Proposé (Q-05) |
 | BR-PRC-12 | (J2) La commission du Modèle B est visible de son seul payeur et distincte de la marge. Aucune décision automatique ne repose sur une valeur cachée à la contrepartie (par exemple un prix plancher). Les messages d'erreur ne contiennent ni montant ni seuil. | S-41, S-42 | Proposé (Q-03) |
 
 ## 9. Négociation
@@ -170,9 +171,9 @@ Les exemples chiffrés du CdC (USD 40/kg, marge de USD 3,30, validité de 7 jour
 | BR-PAY-04 | Montant en Decimal avec devise, rattaché à un Trade. | CdC §30, RJ 33 | Défini |
 | BR-PAY-05 | Bénéficiaire, auteur de la saisie, paiements partiels ou multiples, coordonnées bancaires présentées à l'acheteur. | — | À VALIDER (Q-54, Q-55) |
 | BR-PAY-06 | Un remboursement est enregistré et audité, sans flux réel. | CdC §30 | Défini (autorisation : Q-56) |
-| BR-PAY-07 | (J2) **Séparation des tâches** : l'admin qui a saisi un Payment Record ou l'a passé en Processing ne peut pas le confirmer. Même règle pour un remboursement. | S-34 | Proposé (seuil de double validation : Q-88) |
+| BR-PAY-07 | (J2) **Séparation des tâches** : l'admin qui a saisi un Payment Record ou l'a passé en Processing ne peut pas le confirmer. Même règle pour un remboursement. | S-34 | Proposé (Q-56 ; seuil de double validation : Q-88) |
 | BR-PAY-08 | (J2) Un Payment Record est orienté (payeur, bénéficiaire). En Modèle A : acheteur → MadaSource et MadaSource → exportateur ; en Modèle B : acheteur → exportateur. Chaque justificatif hérite de l'audience de son paiement. | S-40 | Proposé (Q-54, Q-82) |
-| BR-PAY-09 | (J2) Toute modification de coordonnées bancaires (exportateur ou MadaSource) exige une permission dédiée, une ré-authentification, une notification et une re-vérification avant prise d'effet. | S-44 | À VALIDER (Q-87) |
+| BR-PAY-09 | (J2) Toute modification de coordonnées bancaires (exportateur ou MadaSource) exige une permission dédiée, une ré-authentification, une notification et une re-vérification avant prise d'effet. | S-44 | Proposé (Q-87) |
 
 ## 14. Expéditions
 

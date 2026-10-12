@@ -51,8 +51,8 @@ Dépendances de développement à justifier et épingler au Jour 4.
 | **Garde-fou** : la configuration de test refuse de démarrer si l'environnement n'est pas `test` ou si le nom de la base ne se termine pas par `_test`. Aucun test ne peut toucher la base de développement. | Proposé |
 | Schéma créé une fois par session de tests par `alembic upgrade head` sur cette base vide, ce qui teste aussi les migrations. Jamais par `create_all`. Une réinitialisation d'une base de test persistante, si elle devenait nécessaire, serait une exception explicite à faire valider par l'utilisateur. | Proposé |
 | **Isolation par test** : chaque test s'exécute dans une transaction externe annulée à la fin. La session applicative y travaille par points de sauvegarde (mode « rejoindre une transaction externe » de SQLAlchemy 2.x, `join_transaction_mode="create_savepoint"`). Les commits des services n'en sortent jamais. | Proposé |
-| **Tests de concurrence** (marqueur `concurrency`) : ils exigent de vraies transactions parallèles validées. Ils tournent sans transaction externe, sur des données propres à chaque test, **sans nettoyage** : la base éphémère est jetée à la fin. Les droits restreints du rôle applicatif sur la table d'audit (pas de `DELETE`, [security-design.md](security-design.md) §18) sont donc respectés. | Proposé (C33) |
-| L'unité de travail de sécurité (D-29) valide dans sa propre session : les tests qui la concernent vérifient l'écriture par une session distincte. | Proposé |
+| **Tests de concurrence** (marqueur `concurrency`) : ils exigent de vraies transactions parallèles validées. Ils tournent sans transaction externe, sur des données propres à chaque test, **sans nettoyage**, dans une **base éphémère distincte** (ou un job de CI séparé). Ainsi, leurs données validées (compteurs, audit) ne rendent pas les autres tests dépendants de l'ordre d'exécution. Les droits restreints du rôle applicatif sur la table d'audit (pas de `DELETE`, [security-design.md](security-design.md) §18) sont respectés. | Proposé (C33, revue finale) |
+| **Écritures de sécurité** (D-29). En production, elles s'exécutent après l'annulation de la transaction principale, dans une nouvelle transaction. En test, cette transaction est un point de sauvegarde distinct sur la connexion de test, ouvert **après** l'annulation de celui de la requête : l'écriture reste visible des assertions et disparaît à la fin du test. Un point de sauvegarde imbriqué dans celui de la requête serait annulé avec elle ; une session ouverte à part sur le moteur ne verrait pas les données du test. | Proposé (revue finale) |
 
 ## 5. Organisation et fixtures
 
@@ -89,7 +89,7 @@ Tests pilotés par une table, **exhaustifs** (les ensembles d'états sont petits
 - chaque transition permise réussit, produit l'événement attendu (audit, TradeEvent) et respecte l'acteur autorisé ;
 - **toute** autre paire (état de départ, état d'arrivée) est refusée avec 409 `INVALID_STATE_TRANSITION`.
 
-Machines concernées : RFQ, destinataire de RFQ, quotation, négociation, Trade, Payment Record, expédition, vérification, échantillon, litige, exception, produit, compte acheteur ([workflows.md](workflows.md)).
+Machines concernées : RFQ, destinataire de RFQ, quotation, négociation, Trade, Payment Record, expédition, vérification, échantillon, litige, exception, produit, statut de compte d'organisation (D-28) ([workflows.md](workflows.md)).
 
 ### 6.3 Règles critiques
 
@@ -120,7 +120,12 @@ Les tests demandés par la relecture de sécurité du Jour 2 sont listés dans [
 
 Deux garde-fous complémentaires, contre le risque R-01 et les fuites de données privées :
 
-1. **Assertion de réponse** : une fonction d'aide de test parcourt récursivement le JSON d'une réponse et échoue si une clé interdite apparaît. Exemples de clés : `supplier_unit_price`, `margin`, `commission`, `bank_*`, `tax_*`, `internal_notes`, `verification_notes`, `password_hash`, `storage_key`. Elle s'applique à toutes les réponses publiques, acheteur et exportateur de la suite API. La liste vient de la classification des données (Jour 3).
+1. **Assertion de réponse** : une fonction d'aide de test parcourt récursivement le JSON d'une réponse et échoue si une clé interdite **à l'audience de la réponse** apparaît. Il y a **une liste par audience**, alignée sur les classes de base du point 2, car une même clé peut être légitime pour une audience et interdite pour une autre :
+   - `supplier_unit_price` est permis à `exporter_owner` pour sa propre quotation, interdit à `buyer` et `public` ;
+   - les coordonnées bancaires sont permises au propriétaire (masquées), interdites ailleurs ;
+   - `commission` n'est permise qu'à son payeur (S-41).
+
+   Clés interdites à toutes les audiences non admin : `margin`, `internal_notes`, `verification_notes`, `password_hash`, `storage_key`. Les listes viennent de la classification des données (Jour 3).
 2. **Contrôle statique des schémas** : un test parcourt tous les schémas de réponse et vérifie, **par leur classe de base d'audience** (`PublicSchema`, `BuyerSchema`, `ExporterOwnerSchema`, `ExporterRecipientSchema`, `AdminSchema`, `AdminFinanceSchema`), qu'aucun ne déclare de propriété interdite à son audience. Le contrôle ne repose pas sur un suffixe de nom, qui laisserait passer `ProductPublic` ou un schéma admin sans droit financier (C27). Il ne demande aucune donnée et protège dès qu'un schéma change.
 3. **Pas d'union de schémas** : un test vérifie qu'aucun endpoint ne déclare un `response_model` en union de schémas d'audiences différentes, et qu'un endpoint multi-audiences sert exactement le schéma choisi par la politique (D-32, C16).
 4. **Ensemble exact des clés** : pour chaque projection, les tests API comparent l'ensemble des clés renvoyées à la liste blanche attendue, et non seulement à une liste d'interdits (S-37).

@@ -1,6 +1,6 @@
 # Risques, contradictions et questions ouvertes — MadaSource
 
-Jour 1 · 2026-10-12 · Statut : à revoir avec le client · **Mis à jour au Jour 2** : risques R-26 à R-31, contradictions SRC-16 à SRC-19, questions Q-78 à Q-92 (marquées « (J2) »)
+Jour 1 · 2026-10-12 · Statut : à revoir avec le client · **Mis à jour au Jour 2** : risques R-26 à R-31, contradictions SRC-16 à SRC-19, questions Q-78 à Q-93 (marquées « (J2) »)
 
 Ce document est le point d'entrée des décisions `À VALIDER`. Chaque question indique le jour de la roadmap backend qu'elle bloque ou influence. Une question tranchée est déplacée en section 5 avec la décision et sa date, jamais supprimée.
 
@@ -35,7 +35,7 @@ Impact estimé : Élevé, Moyen ou Faible. L'impact est une estimation d'analyse
 | R-23 | Ambiguïté sur les délais en jours (« validité 7 jours ») selon le fuseau (Madagascar UTC+3, acheteurs en Europe). | Métier / technique | Faible | Stockage UTC, instant d'expiration explicite. | Q-70 |
 | R-24 | Indicateurs de performance et avis peu nombreux au lancement : matching biaisé contre les nouveaux exportateurs. | Métier | Faible | Mention « NEW ON MADASOURCE », traitement neutre de l'absence d'historique (à décider). | Q-32, Q-59 |
 | R-25 | Exigences non fonctionnelles non chiffrées (volumétrie, disponibilité, sauvegarde) : dimensionnement et tests de performance sans cible. | Technique | Moyen | Obtenir des ordres de grandeur avant l'Audit C. | Q-72 |
-| R-26 | (J2) Visibilité du dépôt distant (GitHub) non vérifiée. S'il est public, le cahier des charges, les règles de marge et la conception de sécurité sont lisibles par tous. | Sécurité / juridique | Élevé | Vérifier immédiatement que le dépôt est privé. Retirer le document de l'historique seulement avec un accord explicite : opération destructive, sans effet sur les clones existants. | Q-71 |
+| R-26 | (J2) Visibilité du dépôt distant (GitHub) non vérifiée. S'il est public, sont lisibles par tous : le cahier des charges, les règles de marge, la conception de sécurité, et l'historique de `CLAUDE.md` et des deux roadmaps. Ces trois fichiers ont été retirés de l'index (commit f598049) mais restent dans l'historique poussé (commit c6e27d8). | Sécurité / juridique | Élevé | Vérifier immédiatement que le dépôt est privé. Retirer le document de l'historique seulement avec un accord explicite : opération destructive, sans effet sur les clones existants. | Q-71 |
 | R-27 | (J2) Compte admin compromis ou fraude interne : accès transversal aux marges et aux données bancaires, confirmation de paiements fictifs. | Sécurité | Élevé | Second facteur, ensembles de permissions admin, séparation des tâches, ré-authentification, audit des consultations (S-09, S-12, S-16, S-34, S-35). | Q-80, Q-88, Q-89 |
 | R-28 | (J2) Détournement de paiement par modification des coordonnées bancaires (exportateur ou MadaSource). | Sécurité / métier | Élevé | Contrôle renforcé des modifications (S-44). | Q-55, Q-87 |
 | R-29 | (J2) Fuite entre exportateurs concurrents destinataires d'une même RFQ : questions, documents, conversations. | Sécurité / métier | Élevé | Rattachement à la paire (RFQ, exportateur), participants explicites (S-31, S-46). | Q-84 |
@@ -219,18 +219,26 @@ Format : question — contexte — jour bloqué ou influencé.
 - **Q-68** — Conformité des données personnelles (RGPD pour les acheteurs européens, loi malgache) : base légale, conservation, droit à l'effacement face à l'audit immuable. — CdC §60-61 — J3, J12.
 - **Q-69** — Durée de conservation des journaux d'audit, documents, messages. — CdC §52 — J12, J29.
 - **Q-70** — Fuseau de référence pour les échéances exprimées en jours (UTC, Madagascar, fuseau de l'acheteur). — CdC §18 — J25.
-- **Q-71** — Mise à jour au Jour 2 : le cahier des charges a été versionné et poussé sur le dépôt distant le 2026-10-12 (commit c6e27d8). À confirmer **en urgence** : le dépôt est-il privé, et ce document client peut-il y rester ? — R-26 — immédiat.
+- **Q-71** — Mise à jour au Jour 2 : le cahier des charges a été versionné et poussé sur le dépôt distant le 2026-10-12 (commit c6e27d8). À confirmer **en urgence** : le dépôt est-il privé, et ce document client peut-il y rester ? Même question pour `CLAUDE.md` et les deux roadmaps, retirés de l'index mais présents dans l'historique poussé. — R-26 — immédiat.
 - **Q-72** — Exigences non fonctionnelles chiffrées : nombre d'utilisateurs et de transactions, temps de réponse, disponibilité, RPO/RTO des sauvegardes. — CdC §60 — J2, Audit C.
 - **Q-73** — Version de référence des Incoterms (Incoterms® 2020 ?). — CdC §32 — J24.
 - **Q-75** — Feature flags, mode DEMO, i18n et séparation des taux de change ne sont prévus par aucun jour de la roadmap backend (SRC-18). Retenir les jours proposés dans v1-scope.md (Jours 2 à 5), ou ajouter des jours au planning ? — CdC §58-59, §68, §71 — J2.
 - **Q-79** — (J2) Hébergement de production : fournisseur, pays et localisation des données, gestionnaire de secrets, existence d'un environnement de staging. — CdC §77 (point 7) ; D-11, architecture.md §11 — J4, Audit D.
+- **Q-93** — (J2) Ordre de construction. Des modules de bas niveau sont construits **après** des modules qui les utilisent :
+  - `audit` au Jour 12, utilisé dès le Jour 9 ;
+  - `documents` au Jour 29, dès le Jour 14 ;
+  - `messages` au Jour 30, dès le Jour 21 ;
+  - `notifications` au Jour 31, dès le Jour 13.
+
+  Accepter le rétro-branchement à leur jour (ajout des appels et des tests dans les modules antérieurs), ou anticiper un noyau minimal ? Recommandation : rétro-branchement pour `audit` et `notifications`, conforme à RJ 12 et RJ 31 ; noyau minimal du coffre documentaire au Jour 14. Cela alourdit le Jour 14 et allège le Jour 29. — module-boundaries.md §11 — **avant J9**.
 
 ### 4.18 Questions bloquantes par jour (synthèse)
 
 | Jour | Questions à trancher avant le jour |
 |---|---|
 | Immédiat | **Q-71** (confidentialité du dépôt distant) |
-| J2-J3 (architecture, données) | Q-09, Q-10, Q-25, Q-37, Q-66, Q-67, Q-68, Q-74, Q-75, Q-82 |
+| J2-J3 (architecture, données) | Q-09, Q-10, Q-12 (statuts exportateur, D-28), Q-25, Q-37, Q-66, Q-67, Q-68, Q-74, Q-75, Q-82 |
+| Avant J9 (planification) | **Q-93** (ordre de construction) |
 | J4 (initialisation du dépôt) | Q-79 |
 | J8-J15 (sécurité, accès, comptes, vérification) | Q-10, Q-11, Q-12, Q-13, Q-14, Q-15, Q-16, Q-74, Q-76, Q-80, Q-81, Q-87, Q-89, Q-90 |
 | J16-J18 (produits, marketplace) | Q-06, Q-17, Q-18, Q-19, Q-20, Q-21, Q-77, Q-78, Q-86 |
