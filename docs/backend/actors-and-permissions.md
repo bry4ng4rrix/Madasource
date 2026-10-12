@@ -183,7 +183,7 @@ Base : CdC §61 (public / privé), §11, §17, §60. Légende :
 | Expédition : transporteur, références, conteneur, suivi | Non | Partie (Q-58) | Partie (Q-58) | Oui | CdC §31 |
 | Échantillon : prix et paiement | Non | Termes acheteur (Q-53) | Termes fournisseur (Q-53) | Oui | CdC §27 |
 | Commentaire et document joint d'un TradeEvent | Non | Selon l'audience du texte et du document (S-47, S-24) | Idem | Oui | CdC §25 |
-| Notifications | Non | Destinataire ; rendues à la lecture (S-52) | Idem | Destinataire | CdC §29 |
+| Notifications | Non | Destinataire ; type et référence seulement, l'objet est lu avec les droits courants (S-52) | Idem | Destinataire | CdC §29 |
 | Favoris | Non | Propre utilisateur ; aucun accès à un objet devenu inaccessible (S-14) | — | Q-63 | CdC §51 |
 | Marge commerciale brute agrégée | Non | Non | Non | Oui | CdC §63 |
 | Notes de vérification, notes internes et admin | Non | Non | Non | Oui | CdC §8, RJ 35 |

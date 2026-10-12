@@ -1,6 +1,6 @@
 # Conventions de l'API REST — backend MadaSource
 
-Jour 2 · 2026-10-12 · Statut : proposition à valider
+Jour 2 · 2026-10-12 · Statut : proposition à valider. Révisée après les revues `backend-architect` et `security-auditor` du Jour 2.
 
 Ces conventions s'appliquent à tous les endpoints. Un écart doit être justifié dans la documentation du module.
 Erreurs : [error-handling.md](error-handling.md). Sécurité : [security-design.md](security-design.md).
@@ -9,7 +9,7 @@ Erreurs : [error-handling.md](error-handling.md). Sécurité : [security-design.
 
 - API-first : l'API est le contrat du futur frontend et des intégrations (CdC §56).
 - Ressources nommées par des noms au pluriel, actions métier explicites, formats stables et prévisibles.
-- Chaque endpoint déclare son **audience** (public, acheteur, exportateur, admin) et son schéma de réponse propre à cette audience ([security-design.md](security-design.md)).
+- Chaque réponse est servie pour une **audience** explicite parmi `public`, `buyer`, `exporter_owner`, `exporter_recipient`, `madasource` et `madasource_finance` ([security-design.md](security-design.md), S-29). Le schéma est celui de cette audience, choisi explicitement (section 13, D-32).
 
 ## 2. Versionnement
 
@@ -34,22 +34,23 @@ Domaines du CdC §56, rattachés aux modules ([module-boundaries.md](module-boun
 | — | `/verifications` (demandes de l'exportateur), `/admin/verifications` | verification | exportateur / admin |
 | `/products` | `/categories` (catégories actives), `/products` (catalogue de l'exportateur) | products | public / exportateur |
 | `/products`, `/exporters` (lecture publique) | `/marketplace/products`, `/marketplace/exporters/{public_id}`, `/marketplace/exporters/{public_id}/reviews` | marketplace | public |
-| `/rfqs` | `/rfqs` (RFQ de l'acheteur), `/rfq-inbox` (RFQ adressées à l'exportateur) | rfqs | acheteur / exportateur |
-| `/matches` | `/rfqs/{rfq_id}/matches` (visibilité : Q-31), `/admin/matching/...` | matching | acheteur ? / admin |
-| `/quotes` | `/quotes` (quotations de l'exportateur), `/rfqs/{rfq_id}/quotes` (comparaison par l'acheteur) | quotations | exportateur / acheteur |
-| `/negotiations` | `/quotes/{quote_id}/negotiation`, `/quotes/{quote_id}/negotiation/offers`, `/quotes/{quote_id}/accept` | negotiations | parties |
-| `/trades` | `/trades`, `/trades/{trade_id}`, `/trades/{trade_id}/events`, `/trades/{trade_id}/transitions`, `/trades/{trade_id}/dashboard` | trades | parties / admin |
+| `/rfqs` | `/rfqs` (RFQ de l'acheteur), `/rfq-inbox` (RFQ adressées à l'exportateur), `/rfq-inbox/{rfq_id}/decline`, `/rfq-inbox/{rfq_id}/questions` | rfqs | acheteur / exportateur destinataire |
+| `/matches` | `/rfqs/{rfq_id}/matches` et `/rfq-inbox/{rfq_id}/match` (visibilité : Q-31), `/admin/matching/...` | matching | acheteur ? / exportateur ? / admin |
+| `/quotes` | `/rfq-inbox/{rfq_id}/quotes` (Respond : créer une quotation), `/quotes` (quotations de l'exportateur), `/rfqs/{rfq_id}/quotes` (comparaison par l'acheteur) | quotations | exportateur / acheteur |
+| `/negotiations` | `/quotes/{quote_id}/negotiation` (historique), `/quotes/{quote_id}/negotiation/offers` (contre-offre), `/quotes/{quote_id}/negotiation/offers/{offer_id}/reject` | negotiations | parties |
+| — | `/quotes/{quote_id}/accept` : acceptation, **chemin unique** (D-33) | trades | parties |
+| `/trades` | `/trades`, `/trades/{trade_id}`, `/trades/{trade_id}/events`, `/trades/{trade_id}/transitions` | trades | parties / admin |
 | `/payments` | `/trades/{trade_id}/payments`, `/admin/payments` | payment_records | parties / admin |
 | `/shipments` | `/trades/{trade_id}/shipments`, `/shipments/{shipment_id}` | shipments | parties / admin |
 | `/documents` | `/documents` (dépôt, liste par contexte), `/documents/{document_id}/download` | documents | selon le contexte |
 | `/messages` | `/conversations`, `/conversations/{conversation_id}/messages` | messages | participants |
 | `/notifications` | `/notifications` | notifications | destinataire |
 | `/samples` | `/samples` | samples (Q-53) | acheteur / exportateur |
-| `/reviews` | `/trades/{trade_id}/reviews` | reviews | parties |
+| `/reviews` | `/trades/{trade_id}/reviews`, `/buyers/me/indicators` | reviews | parties / acheteur |
 | — | `/disputes`, `/admin/exceptions` | exceptions | parties / admin |
 | `/admin` | `/admin/<domaine>/...` | module du domaine | admin |
 | `/analytics` | `/admin/analytics` | admin (Q-62) | admin |
-| — | `/health/live`, `/health/ready` | core | technique |
+| — | `/health/live`, `/health/ready` | `api/v1/endpoints/health.py` | technique |
 
 Écarts de nommage avec le CdC §56, proposés et à valider :
 - `/messages` devient `/conversations`, car les messages sont rattachés à une conversation ;
@@ -72,7 +73,13 @@ Les chemins sont en minuscules, avec un tiret entre les mots (`rfq-inbox`). Les 
 
 - `PUT` n'est pas utilisé.
 - Un statut ne se modifie jamais par `PATCH` : uniquement par une action ou une transition (BR-RFQ-01, BR-TRD-06).
-- `GET …/transitions` permet au frontend d'afficher les seules actions possibles (RFS J 28, RFS J 32).
+- `GET …/transitions` permet au frontend d'afficher les seules actions possibles (RFS J 28, RFS J 32). Les transitions pilotées par un paiement ou une expédition ne passent pas par cet endpoint : elles résultent des actions de `payment_records` et `shipments` ([module-boundaries.md](module-boundaries.md)).
+- **Acceptation** (D-33) :
+  - chemin unique `POST /quotes/{quote_id}/accept`, avec la proposition visée et sa version : `{"offer_id": "...", "offer_version": 3}` ;
+  - la proposition est la quotation elle-même ou la dernière contre-offre ;
+  - réponse 200 avec `trade_id` et `trade_reference` ;
+  - un rejeu identique renvoie la même réponse ;
+  - une version différente de la version courante renvoie 409 `OFFER_VERSION_MISMATCH` (S-43).
 
 ## 5. Format JSON
 
@@ -95,6 +102,8 @@ Les chemins sont en minuscules, avec un tiret entre les mots (`rfq-inbox`). Les 
 { "items": [], "page": 1, "page_size": 20, "total": 0 }
 ```
 
+`total` ne compte que les éléments **visibles par l'acteur** (S-14).
+
 **Pagination par curseur**, pour les flux chronologiques volumineux (messages, notifications, journal d'audit) :
 - paramètres `limit` (1 à 100, défaut 50) et `cursor` (opaque) ;
 - réponse :
@@ -116,7 +125,7 @@ Les chemins sont en minuscules, avec un tiret entre les mots (`rfq-inbox`). Les 
 | Règle de sécurité des filtres | Statut |
 |---|---|
 | Un endpoint ne filtre et ne trie **que** sur des champs visibles par son audience. Exemple : impossible de trier le marketplace ou les quotations acheteur par prix net fournisseur ou par marge, ce qui reconstituerait l'ordre des marges. | Proposé (R-01) |
-| Un paramètre de requête inconnu est refusé (422) plutôt qu'ignoré, pour éviter un résultat faux en silence (modèles de paramètres avec `extra="forbid"`, à vérifier sur la version de FastAPI retenue au Jour 4). | Proposé |
+| Un paramètre de requête inconnu est refusé (422 `VALIDATION_ERROR`, erreur `extra_forbidden` sur `query.<nom>`) plutôt qu'ignoré, pour éviter un résultat faux en silence. Cela repose sur les modèles de paramètres de requête avec `extra="forbid"`, disponibles depuis FastAPI 0.115.0. Pagination, tri et filtres d'un endpoint sont alors regroupés dans **un seul** modèle de paramètres. | Proposé |
 
 ## 7. Dates, montants, quantités
 
@@ -130,7 +139,8 @@ Les chemins sont en minuscules, avec un tiret entre les mots (`rfq-inbox`). Les 
 | Quantité | `value` (chaîne décimale) et `unit` | `{"value": "20000", "unit": "kg"}` | Proposé (BR-PRD-03, Q-21) |
 | Score de matching | Chaîne décimale de 0 à 100, avec détail par critère | `"94.0"` | Proposé |
 
-- En entrée, montants et quantités sont des **chaînes**. Les nombres JSON sont refusés, pour éviter toute approximation en virgule flottante. Comportement exact à vérifier au Jour 5. Proposé.
+- En entrée, montants et quantités sont **uniquement des chaînes**. Un nombre JSON est refusé (422) par un type d'entrée dédié (D-14). Sans ce type, le nombre serait accepté : FastAPI décode le corps JSON avant Pydantic, donc le nombre devient d'abord un `float`, et Pydantic accepte un `float` pour un `Decimal`, même en mode strict. Proposé.
+- En sortie, toute réponse passe par un modèle Pydantic, qui sérialise les `Decimal` en chaînes. Jamais de dictionnaire encodé par `jsonable_encoder`, qui les convertit en `float`.
 - Aucune conversion de devise implicite (BR-CUR-02).
 - Précision et arrondis par devise : Q-08.
 
@@ -156,6 +166,7 @@ Les libellés affichés (en anglais ou en français) sont produits par le fronte
 ## 10. Idempotence et concurrence
 
 - Les actions critiques (acceptation, confirmation de paiement) sont idempotentes par leur état. Rejouer la même action renvoie le résultat existant (200) ; une action contradictoire renvoie 409 (D-09).
+- Une action sur une proposition transmet la **version vue**. Si une nouvelle version existe, la réponse est 409 `OFFER_VERSION_MISMATCH` (S-43).
 - Un conflit de concurrence renvoie 409 `CONCURRENT_MODIFICATION`, que le client peut retenter ([error-handling.md](error-handling.md)).
 - `Idempotency-Key` : non requis en V1.
 
@@ -167,7 +178,7 @@ Les libellés affichés (en anglais ou en français) sont produits par le fronte
 | `X-Request-ID` | Corrélation : repris s'il est fourni et valide, sinon généré ; toujours renvoyé | Proposé |
 | `Location` | URL de la ressource créée (201) | Proposé |
 | `Retry-After` | Avec 429 et 503 | Proposé |
-| `X-MadaSource-Mode: demo` | Réponse d'une instance DEMO (D-18) | Proposé |
+| `X-MadaSource-Mode: demo` | Réponse d'une instance DEMO. En complément, les références lisibles y portent un préfixe DEMO, visible dans le corps (D-18, S-57). | Proposé |
 | `Accept-Language` | Non exploité en V1 (D-19) | Proposé |
 
 ## 12. Codes de statut HTTP
@@ -177,10 +188,11 @@ Les libellés affichés (en anglais ou en français) sont produits par le fronte
 | 200 | Lecture, modification, action réussie |
 | 201 | Création (avec `Location`) |
 | 204 | Suppression ou action sans contenu (marquer une notification comme lue) |
-| 401 | Non authentifié, ou jeton invalide, expiré ou révoqué |
+| 401 | Non authentifié, jeton invalide, expiré ou révoqué, ou ré-authentification récente exigée (S-35) |
 | 403 | Authentifié mais permission insuffisante pour **l'action** |
 | 404 | Ressource inexistante **ou** appartenant à une autre organisation (D-25) ; module désactivé |
-| 409 | Transition d'état invalide, conflit d'unicité, quotation expirée, conflit de concurrence |
+| 405 | Méthode non permise sur ce chemin |
+| 409 | Transition d'état invalide, conflit d'unicité, quotation expirée, version de proposition dépassée, conflit de concurrence |
 | 413 | Requête ou fichier trop volumineux |
 | 415 | Type de contenu non accepté |
 | 422 | Données invalides : schéma, ou règle métier sur les données saisies (sous le MOQ, catégorie désactivée…) |
@@ -192,16 +204,17 @@ Les libellés affichés (en anglais ou en français) sont produits par le fronte
 
 | Règle | Statut |
 |---|---|
-| Schéma servi sous `/api/v1/openapi.json`, documentation interactive sous `/api/v1/docs`. Exposition en production : à décider ([security-design.md](security-design.md)). | Proposé |
+| Schéma servi sous `/api/v1/openapi.json`, documentation interactive sous `/api/v1/docs`, en local, en test et en staging. **Désactivés en production publique** ; les routes admin n'apparaissent dans aucun schéma public ([security-design.md](security-design.md) §16). | Proposé |
 | Un tag par module ; `operationId` unique et stable au format `<module>_<action>` (exemple : `rfqs_submit`), pour la génération de clients. | Proposé |
-| Noms de schémas : `<Entité><Audience><Usage>`, par exemple `RFQBuyerRead`, `RFQInboxItemExporterRead`, `ProductPublicRead`, `QuotationBuyerRead`, `QuotationExporterRead`, `QuotationAdminRead`. | Proposé |
+| Noms de schémas : `<Entité><Audience><Usage>`, avec les audiences de S-29 : `Public`, `Buyer`, `ExporterOwner`, `ExporterRecipient`, `Admin`, `AdminFinance`. Exemples : `ProductPublicRead`, `RFQBuyerRead`, `RFQExporterRecipientRead`, `QuotationBuyerRead`, `QuotationExporterOwnerRead`, `QuotationAdminFinanceRead`. Chaque schéma hérite de la **classe de base de son audience**, ce qui permet le contrôle statique de [testing-strategy.md](testing-strategy.md#7-non-exposition-des-données-sensibles). | Proposé (C27) |
+| **Sélection du schéma** : la politique d'accès renvoie l'audience et le router instancie explicitement le schéma correspondant. Jamais de `response_model` en union résolue automatiquement : depuis Pydantic 2.8, la validation d'une union retient le membre qui valide le plus de champs, donc potentiellement le schéma admin. Un chemin par audience quand c'est possible (D-32). | Proposé (C16) |
 | Chaque endpoint documente ses erreurs possibles (codes de [error-handling.md](error-handling.md)) et des exemples **fictifs** (domaines `example.com`, sociétés inventées). | Proposé |
 
 ## 14. Limites
 
 | Limite | Valeur proposée | Statut |
 |---|---|---|
-| Corps JSON | 1 Mio (hors dépôt de fichiers) | Proposé |
+| Corps JSON | 1 Mio (hors dépôt de fichiers). Starlette n'impose aucune limite par lui-même : la limite est appliquée au reverse proxy et par un middleware de l'application. | Proposé |
 | Taille de page | 100 éléments au plus | Proposé |
 | Fichiers | Taille et formats : Q-48 (formats : PDF, JPG, PNG, DOCX, CdC §26) | À VALIDER |
 | Longueurs de chaînes, nombre de lignes d'une RFQ ou d'une quotation | Fixées par champ au Jour 3 et dans chaque module | À définir |
@@ -245,19 +258,19 @@ Réponse `201`, en-tête `Location: /api/v1/rfqs/0199…` :
 }
 ```
 
-**Une même quotation, trois audiences** (séparation des schémas, BR-PRC-09) :
+**Une même quotation, trois audiences** (séparation des schémas, BR-PRC-09, BR-PRC-11) :
 
-| Champ | `QuotationExporterRead` | `QuotationBuyerRead` | `QuotationAdminRead` |
+| Champ | `QuotationExporterOwnerRead` | `QuotationBuyerRead` | `QuotationAdminFinanceRead` |
 |---|---|---|---|
-| `reference`, `status`, validité, Incoterm, quantité, délai | oui | oui | oui |
+| `reference`, `version`, `status`, validité, Incoterm, quantité, délai | oui | oui | oui |
 | Prix net fournisseur (`supplier_unit_price`) | oui (le sien) | **non** | oui |
 | Coûts externes détaillés | Q-04 | Q-04 | oui |
 | Marge MadaSource | **non** | **non** | oui |
-| Prix final acheteur (`unit_price`) | Q-05 | oui | oui |
+| Prix final acheteur (`unit_price`) | **non par défaut** : la marge se déduirait (S-19) ; Q-05 | oui | oui |
 
 ## 16. Décisions ouvertes
 
 - Écarts de nommage avec le CdC §56 (section 3).
 - Visibilité des résultats de matching (Q-31) et des coûts externes (Q-04).
-- Exposition de l'OpenAPI en production ([security-design.md](security-design.md)).
 - Référentiels pays et ports (UN/LOCODE) : source et mise à jour.
+- Emplacement des dépendances HTTP d'`access_control` ([module-boundaries.md](module-boundaries.md) §4, Jour 7).

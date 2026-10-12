@@ -82,7 +82,7 @@ Décisions de sécurité : identifiants **S-NN** ; statuts Retenu / Proposé / �
 | S-11 | Permissions nommées `<ressource>:<action>`. L'association rôles-permissions est une donnée (tables), pas du code. | Proposé |
 | S-12 | Rôles actifs en V1 : Buyer, Exporter, MadaSource Admin. Permissions admin **regroupées en ensembles distincts** : lecture financière (marges, prix nets), données bancaires, confirmation et remboursement de paiement, règles de prix et de matching, comptes admin, lecture des conversations, journal d'audit. Cela prépare les rôles futurs (CdC §53). Faut-il les séparer entre admins dès la V1 ? Q-89. | Proposé |
 | S-13 | Toute route est privée sauf déclaration explicite comme publique. Chaque route privée déclare sa permission. | Proposé |
-| S-28 | Un acteur **Système** explicite, aux permissions minimales et audité, pour les traitements automatiques : matching, création du Trade, calcul des indicateurs. | Proposé |
+| S-58 | Un acteur **Système** explicite, aux permissions minimales et audité, pour les traitements automatiques : matching, calcul des indicateurs, simulations DEMO (« Système DEMO », D-18). | Proposé |
 
 ### 5.2 Audiences : remplacement de la notion de « partie »
 
@@ -123,7 +123,7 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 
 | ID | Décision | Statut |
 |---|---|---|
-| S-37 | Chaque objet exposé déclare une **projection par audience** : une liste blanche de champs, implémentée par un schéma distinct. La politique d'accès choisit la projection. Les tests vérifient l'**ensemble exact** des clés de chaque projection ([testing-strategy.md](testing-strategy.md)). | Proposé |
+| S-37 | Chaque objet exposé déclare une **projection par audience** : une liste blanche de champs, implémentée par un schéma distinct qui hérite de la classe de base de son audience. La politique d'accès choisit l'audience ; le router instancie **explicitement** le schéma correspondant, sans union de schémas résolue automatiquement (D-32). Les tests vérifient l'**ensemble exact** des clés de chaque projection ([testing-strategy.md](testing-strategy.md)). | Proposé |
 | S-38 | **Liste blanche des champs modifiables** par entité et par audience. Tout champ fixé par le serveur (statut, organisation, marge, niveau de vérification…) est refusé en 422 (constat M-8). | Proposé |
 
 ### 6.2 Composantes de prix (R-01)
@@ -155,7 +155,7 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 
 ## 8. Intégrité des transactions
 
-- Transitions uniquement par les services, sous verrou, avec revérification de l'état (D-09).
+- Transitions uniquement par les services, sous verrou `FOR NO KEY UPDATE` avec relecture de la ligne (`populate_existing`), puis revérification de l'état (D-09).
 - Actions critiques idempotentes, contraintes d'unicité en dernier rempart (D-09).
 - Version de l'offre acceptée (S-43).
 - Séparation des tâches sur les paiements (S-34).
@@ -196,7 +196,7 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 
 | ID | Décision | Statut |
 |---|---|---|
-| S-52 | Une notification ne stocke que son type, la référence de l'objet et son destinataire. Son contenu est **rendu à la lecture**, avec la projection et les droits **courants** du lecteur : jamais de montant figé, jamais d'URL signée. Un utilisateur retiré d'une organisation ne relit pas les anciennes notifications de celle-ci (constat M-10). | Proposé |
+| S-52 | Une notification ne stocke que son **code de type**, la référence de l'objet et son destinataire : aucun texte composé, aucun montant, aucune URL signée. Le client affiche le libellé du type (D-19). Pour le détail, il lit l'objet par l'endpoint du module qui le possède, qui applique la projection et les droits **courants** du lecteur. `notifications` filtre sur l'adhésion courante : un utilisateur retiré d'une organisation ne voit plus les notifications de celle-ci (constats M-10, C7). | Proposé |
 
 ## 13. Vérification, Passport et références
 
@@ -266,8 +266,8 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 
 | ID | Décision | Statut |
 |---|---|---|
-| D-18 | Instance distincte, avec sa propre base, son propre stockage et ses propres secrets ; démarrage refusé en production avec `DEMO_MODE` ([architecture.md](architecture.md#82-mode-demo-cdc-68)). | Proposé (Q-67) |
-| S-57 | Compléments, contre l'usage d'une capture d'écran DEMO comme preuve de paiement (constat E-10) :<br>- **espace de noms distinct** pour les identifiants lisibles (préfixe propre au DEMO) ;<br>- marqueur `demo` dans **chaque corps de réponse, notification et document généré** (l'en-tête seul ne se voit pas sur une capture) ;<br>- emails désactivés, ou limités à une liste blanche ;<br>- accès sur invitation, aucune donnée réelle ;<br>- adaptateurs de démonstration non chargeables hors de l'environnement `demo` (garde au démarrage). | Proposé |
+| D-18 | Instance distincte, avec sa propre base, son propre stockage et ses propres secrets ; démarrage refusé en production avec `DEMO_MODE`. Les simulations exécutent les cas d'usage normaux par l'acteur « Système DEMO » (S-58), via des endpoints montés seulement en environnement `demo` ([architecture.md](architecture.md#82-mode-demo-cdc-68)). | Proposé (Q-67) |
+| S-57 | Compléments, contre l'usage d'une capture d'écran DEMO comme preuve de paiement (constat E-10) :<br>- **espace de noms distinct** : préfixe DEMO dans toute référence lisible (`RFQ-`, `MSQ-`, `MST-`), donc visible dans chaque corps de réponse qui porte une référence et sur toute capture ;<br>- filigrane DEMO sur les documents générés ;<br>- en-tête `X-MadaSource-Mode: demo` ; bannière côté frontend ;<br>- emails désactivés, ou limités à une liste blanche ;<br>- accès sur invitation, aucune donnée réelle ;<br>- endpoints de simulation non montés hors de l'environnement `demo` (garde au démarrage, D-11). | Proposé |
 
 ## 21. Tests de sécurité
 

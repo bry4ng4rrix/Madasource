@@ -290,12 +290,12 @@ Le CdC §55 liste les entités minimales par domaine. Le tableau ci-dessous en d
 
 | Domaine | Entités (CdC §55) | Relations conceptuelles |
 |---|---|---|
-| Identity | Users, Organizations, Roles, Permissions (+ Membership, RJ 9) | Organization 1–N Membership N–1 User ; Membership N–1 Role ; Role N–N Permission ; Organization de type Buyer ou Exporter (cumul : Q-09) ; organisation interne MadaSource pour les admins et appartenance d'un utilisateur à plusieurs organisations : Q-74 |
-| Buyers | BuyerProfiles | Organization 1–1 BuyerProfile |
-| Exporters | Exporters, ExporterProfiles, VerificationRecords, Certifications, CapacityRecords | Organization 1–1 ExporterProfile ; ExporterProfile 1–N VerificationRecord ; 1–N CapacityRecord ; N–N Certification |
+| Identity | Users, Organizations, Roles, Permissions (+ Membership, RJ 9) | Organization 1–N Membership N–1 User ; Role N–N Permission ; (J2) attribution des rôles aux adhésions (MembershipRole) détenue par `access_control`, et non une clé étrangère de Membership vers Role (C12) ; (J2) statut de compte porté par l'Organization (D-28) ; Organization de type Buyer ou Exporter (cumul : Q-09) ; organisation interne MadaSource pour les admins et appartenance d'un utilisateur à plusieurs organisations : Q-74 |
+| Buyers | BuyerProfiles | Organization 1–1 BuyerProfile ; (J2) produits d'intérêt stockés en codes de catégories, sans clé étrangère (D-30) |
+| Exporters | Exporters, ExporterProfiles, VerificationRecords, Certifications, CapacityRecords | Organization 1–1 ExporterProfile ; (J2) Organization (exportatrice) 1–N VerificationRecord, et non ExporterProfile, pour respecter l'ordre des modules (C11) ; ExporterProfile 1–N CapacityRecord (codes de catégories) ; certifications en codes validés (D-30, Q-20) |
 | Marketplace | Products, ProductCategories, ProductListings, ProductSpecifications | ProductCategory 1–N Product ; ExporterProfile 1–N Product ; Product 1–N ProductSpecification (attributs par catégorie) ; Product N–N Certification. La distinction Product / ProductListing est à trancher au Jour 3. |
 | RFQ | RFQs, RFQItems, RFQMatches | Buyer Organization 1–N RFQ ; RFQ 1–N RFQItem (multi-produits : Q-25) ; RFQ 1–N RFQMatch N–1 Exporter Organization |
-| Commercial | Quotes, QuoteItems, Negotiations, CounterOffers | RFQ 1–N Quote ; Exporter Organization 1–N Quote ; Quote 1–N QuoteItem ; Quote 1–0..1 Negotiation ; Negotiation 1–N CounterOffer ; Quote ou CounterOffer 1–N ExternalCost (CdC §33) |
+| Commercial | Quotes, QuoteItems, Negotiations, CounterOffers | RFQ 1–N Quote ; Exporter Organization 1–N Quote ; (J2) Quote 1–N QuoteVersion (S-43) ; Quote 1–N QuoteItem ; Quote 1–0..1 Negotiation ; Negotiation 1–N CounterOffer ; Quote 1–N ExternalCost (CdC §33) ; (J2) association CounterOffer–ExternalCost détenue par `negotiations` (C12) |
 | Trade | Trades, TradeItems, TradeEvents, TradeStatus | Quote acceptée 1–0..1 Trade (plusieurs Trades par RFQ : Q-26) ; Trade 1–N TradeItem ; Trade 1–N TradeEvent |
 | Logistics | Shipments, TrackingEvents | Trade 1–N? Shipment (Q-57) ; Shipment 1–N TrackingEvent (saisie manuelle) |
 | Payment | Payments, PaymentRecords, PaymentDocuments | Trade 1–N? PaymentRecord (Q-54) ; PaymentRecord 1–N Document (justificatifs) |
@@ -303,7 +303,14 @@ Le CdC §55 liste les entités minimales par domaine. Le tableau ci-dessous en d
 | Communication | Conversations, Messages, Notifications | Conversation → 1 contexte (RFQ, Quote, Negotiation, Trade, SampleRequest) ; Conversation 1–N Message ; User 1–N Notification |
 | Samples | SampleRequests, SampleShipments | Buyer Org 1–N SampleRequest N–1 Exporter Org ; SampleRequest N–1 Product ; SampleRequest 0..1 → RFQ |
 | Reputation | Reviews, Ratings, PerformanceMetrics | Trade terminé 1–0..2 Review (une par sens) ; Review 1–N Rating (critère) ; Organization 1–N PerformanceMetric |
-| Administration | AuditLogs, Disputes, Exceptions | AuditLog → acteur et objet ; Exception → 0..1 Trade ou autre objet concerné (quotation, RFQ, exportateur : SRC-19) ; Trade 1–N? Dispute |
+| Administration | AuditLogs, Disputes, Exceptions | AuditLog → acteur et objet, (J2) par identifiants sans clé étrangère (C12) ; Exception → 0..1 Trade ou autre objet concerné (quotation, RFQ, exportateur, paiement, expédition : SRC-19) ; Trade 1–N? Dispute |
 | Partners | Partners, PartnerServices, PartnerConfigurations | Hors V1 : aucune table créée sans besoin (RJ section 1) |
 
-Entités transverses à prévoir en conception (Jour 3) : configuration des feature flags, règles de prix configurables (CdC §17), taux de change séparés (CdC §59), séquences des identifiants lisibles.
+Entités transverses à prévoir en conception (Jour 3) :
+- configuration des feature flags ;
+- règles de prix configurables et versionnées (CdC §17, S-43) ;
+- taux de change séparés (CdC §59) ;
+- compteurs des identifiants lisibles et outbox, qui sont des tables techniques du socle (D-16, D-20) ;
+- en Modèle A, deux jeux de termes figés par Trade (S-39).
+
+Toute relation entre modules doit respecter l'ordre des niveaux de [module-boundaries.md](module-boundaries.md#3-niveaux-et-dépendances-permises) (J2).

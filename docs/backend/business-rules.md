@@ -158,7 +158,7 @@ Les exemples chiffrés du CdC (USD 40/kg, marge de USD 3,30, validité de 7 jour
 | BR-MSG-04 | (J2) Une conversation a une liste explicite de participants ; l'accès suit l'évolution de la participation. Tout texte libre (commentaire, note, motif) porte une audience ; pour un texte saisi par un admin, elle est « interne » par défaut. | S-46, S-47 | Proposé |
 | BR-NOT-01 | Une notification est générée pour chaque événement listé au CdC §29. | CdC §29 | Défini (destinataires : Q-52) |
 | BR-NOT-02 | Le système n'affirme jamais qu'un email ou un push a été envoyé sans confirmation du fournisseur. | RJ 11, RJ 31 | Défini |
-| BR-NOT-03 | (J2) Une notification ne stocke que son type, la référence de l'objet et son destinataire. Son contenu est rendu à la lecture, avec les droits courants du lecteur, sans montant ni URL signée. | S-52 | Proposé |
+| BR-NOT-03 | (J2) Une notification ne stocke que son code de type, la référence de l'objet et son destinataire, sans montant ni URL signée. Le détail est lu par l'endpoint du module propriétaire de l'objet, avec les droits courants du lecteur. | S-52 | Proposé |
 
 ## 13. Paiements
 

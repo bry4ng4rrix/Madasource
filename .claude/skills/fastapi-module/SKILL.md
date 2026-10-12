@@ -25,11 +25,16 @@ Module visé : $ARGUMENTS
 3. **`models.py`** : SQLAlchemy 2.x (`Mapped[...]`, `mapped_column`), clé primaire UUID, `organization_id` si la ressource appartient à une organisation, timestamps `DateTime(timezone=True)`, `Numeric(p, s)` pour les montants, statuts contraints. Enregistrer le modèle pour la découverte Alembic.
 4. **`schemas.py`** (Pydantic v2) :
    - `<X>Create` / `<X>Update` : uniquement les champs modifiables par le client, `model_config = ConfigDict(extra="forbid")`. Jamais `id`, `organization_id`, `status`, `created_by`, marge ou niveau de vérification en entrée.
-   - `<X>Read` : vue de l'organisation propriétaire.
-   - `<X>Public` (si exposé publiquement) et `<X>AdminRead` (si nécessaire), définis explicitement. Un schéma public n'hérite jamais d'un schéma privé.
-5. **`permissions.py`** : permissions nommées `<module>:<action>` et dépendances FastAPI qui vérifient permission et appartenance (skill `secure-api`).
-6. **`service.py`** : logique métier, transitions d'état, transaction DB, audit, idempotence. Reçoit la session et l'acteur et ne connaît pas HTTP : pas de `Request`, pas d'`HTTPException`, mais des exceptions métier définies dans `app/core/exceptions.py`.
-7. **`repository.py`** : seulement si des requêtes sont réutilisées ou complexes.
+   - Schémas de lecture **un par audience** : `<X><Audience>Read`, avec les audiences `Public`, `Buyer`, `ExporterOwner`, `ExporterRecipient`, `Admin` et `AdminFinance` (S-29). Chaque schéma hérite de la classe de base de son audience. Un schéma public n'hérite jamais d'un schéma privé.
+   - Montants et quantités en entrée : type qui n'accepte que des chaînes (D-14).
+5. **`permissions.py`** : la **politique d'accès** (acteur, action, ressource) → audience ou refus (S-28), et les permissions nommées `<ressource>:<action>` (S-11). Voir le skill `secure-api`.
+6. **`service.py`** : logique métier, transitions d'état, transaction, audit, idempotence.
+   - Il reçoit la session et l'acteur et ne connaît pas HTTP : pas de `Request`, pas d'`HTTPException`, mais les exceptions de `app/core/exceptions.py`.
+   - Seul le cas d'usage appelé par le router fait le commit (D-08).
+   - Transitions : verrou `FOR NO KEY UPDATE` avec `populate_existing`, parent avant toute insertion fille, ordre des niveaux (D-09).
+7. **`contracts.py`** : DTO immuables renvoyés aux autres modules, jamais d'objet ORM ni de schéma HTTP (D-31). Seulement si d'autres modules appellent celui-ci.
+8. **`repository.py`** : seulement si des requêtes sont réutilisées ou complexes. `get_for_actor` et `list_for_actor` appliquent la politique ; un accès non filtré porte un nom explicite (S-14). Les lectures publiques ou transverses sont publiées comme **projections** (`Select` limité aux colonnes autorisées), sans modèles d'un autre module ([module-boundaries.md](../../../docs/backend/module-boundaries.md) §6).
+9. **Router** : le router instancie explicitement le schéma de l'audience retournée par la politique, jamais une union de schémas (D-32).
 8. **`router.py`** : endpoints minces (dépendances d'auth et de permission, appel du service), `response_model` et codes HTTP explicites, pagination sur les listes. Enregistrer le router dans `app/api/v1/router.py`.
 9. **Migration** : skill `database-migrations`.
 10. **Tests** (directement ou via l'agent `test-engineer`) :

@@ -1,6 +1,6 @@
 # Stratégie de tests — backend MadaSource
 
-Jour 2 · 2026-10-12 · Statut : proposition à valider
+Jour 2 · 2026-10-12 · Statut : proposition à valider. Révisée après les revues `backend-architect` et `security-auditor` du Jour 2.
 
 Références :
 - règles permanentes : CLAUDE.md, `.claude/rules/tests.md` ;
@@ -24,7 +24,7 @@ Références :
 | API | `backend/tests/api/<module>/` | Endpoints : statuts HTTP, schémas de réponse, permissions, erreurs, non-exposition | PostgreSQL de test | Client ASGI en mémoire |
 | Migrations | `backend/tests/integration/migrations/` | Montée complète, absence d'écart entre modèles et migrations, réversibilité de la dernière révision | PostgreSQL de test | Non |
 | Contrat OpenAPI | `backend/tests/api/` | Absence de champ interdit dans les schémas publics, acheteur et exportateur ; détection des changements cassants (facultatif) | Non | Non |
-| Parcours complet | `backend/tests/e2e/` | Parcours Audit A pour Vanilla, Cloves et Cocoa | PostgreSQL de test | Client ASGI |
+| Parcours complet | `backend/tests/e2e/` (dossier ajouté à la structure RJ, D-03) | Parcours Audit A pour Vanilla, Cloves et Cocoa | PostgreSQL de test | Client ASGI |
 | Sécurité | Intégré aux niveaux API et E2E, renforcé à l'Audit B | Accès horizontaux, élévation de privilèges, fuites, jetons | PostgreSQL de test | Client ASGI |
 | Performance | Hors de la suite courante (Audit C) | Volumétrie synthétique en local | Dédiée | — |
 
@@ -38,7 +38,7 @@ Dépendances de développement à justifier et épingler au Jour 4.
 |---|---|---|
 | Lanceur | `pytest` | Imposé par la stack (RJ section 1) |
 | Tests asynchrones | Plugin pytest d'AnyIO (backend asyncio seul), ou `pytest-asyncio` | AnyIO est déjà une dépendance de Starlette et FastAPI : pas de paquet supplémentaire. Choix au Jour 4. |
-| Client HTTP de test | `httpx` (`AsyncClient` et transport ASGI) | Appelle l'application en mémoire, sans serveur |
+| Client HTTP de test | `httpx` (`AsyncClient` et transport ASGI) | Appelle l'application en mémoire, sans serveur. Le transport ASGI de httpx **n'exécute pas** le cycle de démarrage et d'arrêt (lifespan) : les fixtures le déclenchent explicitement. |
 | Couverture | `pytest-cov` | Mesure et rapport en CI |
 | Données de test | Fonctions de fabrication écrites dans le projet (pas de bibliothèque) | Pas de dépendance ; données explicites |
 | Temps | Horloge injectable (D-13), sans bibliothèque de gel du temps | Dates contrôlées sans modifier l'horloge du système |
@@ -47,11 +47,12 @@ Dépendances de développement à justifier et épingler au Jour 4.
 
 | Règle | Statut |
 |---|---|
-| Base dédiée, dont le nom se termine par `_test` (par exemple `madasource_test`), sur le service PostgreSQL de Docker Compose en local et sur un service PostgreSQL éphémère en CI (Jour 7). Même version majeure de PostgreSQL qu'en production. | Proposé |
-| **Garde-fou** : la configuration de test refuse de démarrer si l'environnement n'est pas `test` ou si le nom de la base ne se termine pas par `_test`. Aucun test ne peut donc toucher la base de développement. | Proposé |
-| Schéma créé une fois par session de tests par `alembic upgrade head`, ce qui teste aussi les migrations. Jamais par `create_all`. | Proposé |
+| Base dédiée, dont le nom se termine par `_test` (par exemple `madasource_test`), servie par un **PostgreSQL éphémère** : un conteneur de test dont les données vivent en mémoire (tmpfs) et repartent vides à chaque démarrage en local, et le service PostgreSQL éphémère de la CI (Jour 7). Aucune base persistante n'est donc jamais supprimée ni réinitialisée par les tests (CLAUDE.md). Même version majeure de PostgreSQL qu'en production. | Proposé (C33) |
+| **Garde-fou** : la configuration de test refuse de démarrer si l'environnement n'est pas `test` ou si le nom de la base ne se termine pas par `_test`. Aucun test ne peut toucher la base de développement. | Proposé |
+| Schéma créé une fois par session de tests par `alembic upgrade head` sur cette base vide, ce qui teste aussi les migrations. Jamais par `create_all`. Une réinitialisation d'une base de test persistante, si elle devenait nécessaire, serait une exception explicite à faire valider par l'utilisateur. | Proposé |
 | **Isolation par test** : chaque test s'exécute dans une transaction externe annulée à la fin. La session applicative y travaille par points de sauvegarde (mode « rejoindre une transaction externe » de SQLAlchemy 2.x, `join_transaction_mode="create_savepoint"`). Les commits des services n'en sortent jamais. | Proposé |
-| **Tests de concurrence** (marqueur `concurrency`) : ils exigent de vraies transactions parallèles validées. Ils tournent sans transaction externe, puis nettoient leurs données. Ce nettoyage n'est permis que sur la base `_test`, garde-fou ci-dessus actif. | Proposé |
+| **Tests de concurrence** (marqueur `concurrency`) : ils exigent de vraies transactions parallèles validées. Ils tournent sans transaction externe, sur des données propres à chaque test, **sans nettoyage** : la base éphémère est jetée à la fin. Les droits restreints du rôle applicatif sur la table d'audit (pas de `DELETE`, [security-design.md](security-design.md) §18) sont donc respectés. | Proposé (C33) |
+| L'unité de travail de sécurité (D-29) valide dans sa propre session : les tests qui la concernent vérifient l'écriture par une session distincte. | Proposé |
 
 ## 5. Organisation et fixtures
 
@@ -104,13 +105,25 @@ Machines concernées : RFQ, destinataire de RFQ, quotation, négociation, Trade,
 | Feature flags | Module désactivé : routes absentes. Catégorie désactivée : création refusée (`CATEGORY_DISABLED`) et masquage public (D-17) |
 | Configuration | La production refuse de démarrer en debug, avec un secret par défaut ou avec `DEMO_MODE` (D-11, D-18) |
 | Erreurs | Catalogue de [error-handling.md](error-handling.md) §10 |
+| Verrous et concurrence | Deux quotations simultanées sur la même RFQ : aucune erreur d'interblocage (`FOR NO KEY UPDATE`, parent verrouillé avant l'insertion, C4). L'état revérifié après verrouillage est l'état en base, même si l'objet était déjà chargé (`populate_existing`, C3). |
+| Acceptation | Chemin unique ; version transmise différente de la version courante → 409 `OFFER_VERSION_MISMATCH` ; rejeu → même réponse 200 (D-33, S-43) |
+| Ports | Comportement par défaut : P-01 refuse un contexte non branché ; P-03 sans implémentation laisse la RFQ en Submitted. Les implémentations des modules actifs sont branchées (C9). |
+| Écritures de sécurité | Rejeu d'un jeton de rafraîchissement → 401 **et** session révoquée en base, malgré l'annulation de la transaction de la requête (D-29) |
+| Outbox | Aucun email n'est envoyé si la transaction est annulée ; l'envoi a lieu après validation (D-20) |
+| DTO inter-modules | Une fonction publique d'un module ne renvoie jamais d'objet ORM (C15) |
+
+### 6.4 Sécurité
+
+Les tests demandés par la relecture de sécurité du Jour 2 sont listés dans [security-design.md](security-design.md#21-tests-de-sécurité) §21 : non-déduction de la marge par audience, isolement des exportateurs concurrents, audience des documents et des versions, coordonnées bancaires, séparation des tâches, mode DEMO, notifications. Ils s'ajoutent à la matrice de la section 6.1.
 
 ## 7. Non-exposition des données sensibles
 
 Deux garde-fous complémentaires, contre le risque R-01 et les fuites de données privées :
 
 1. **Assertion de réponse** : une fonction d'aide de test parcourt récursivement le JSON d'une réponse et échoue si une clé interdite apparaît. Exemples de clés : `supplier_unit_price`, `margin`, `commission`, `bank_*`, `tax_*`, `internal_notes`, `verification_notes`, `password_hash`, `storage_key`. Elle s'applique à toutes les réponses publiques, acheteur et exportateur de la suite API. La liste vient de la classification des données (Jour 3).
-2. **Contrôle statique de l'OpenAPI** : un test lit le schéma OpenAPI généré et vérifie qu'aucun schéma `*PublicRead`, `*BuyerRead` ou `*ExporterRead` ne déclare de propriété interdite à son audience. Ce test ne demande aucune donnée et protège dès qu'un schéma change.
+2. **Contrôle statique des schémas** : un test parcourt tous les schémas de réponse et vérifie, **par leur classe de base d'audience** (`PublicSchema`, `BuyerSchema`, `ExporterOwnerSchema`, `ExporterRecipientSchema`, `AdminSchema`, `AdminFinanceSchema`), qu'aucun ne déclare de propriété interdite à son audience. Le contrôle ne repose pas sur un suffixe de nom, qui laisserait passer `ProductPublic` ou un schéma admin sans droit financier (C27). Il ne demande aucune donnée et protège dès qu'un schéma change.
+3. **Pas d'union de schémas** : un test vérifie qu'aucun endpoint ne déclare un `response_model` en union de schémas d'audiences différentes, et qu'un endpoint multi-audiences sert exactement le schéma choisi par la politique (D-32, C16).
+4. **Ensemble exact des clés** : pour chaque projection, les tests API comparent l'ensemble des clés renvoyées à la liste blanche attendue, et non seulement à une liste d'interdits (S-37).
 
 ## 8. Migrations
 
