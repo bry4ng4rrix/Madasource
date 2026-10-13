@@ -67,7 +67,7 @@ backend/app/
 ├── api/v1/router.py     agrège les routers des modules actifs sous /api/v1
 ├── api/v1/endpoints/    couche HTTP hors modules : santé (health.py) et routers des modules de niveau 1 à 3 (audit, auth, organizations)
 ├── core/                configuration, journalisation, primitives de sécurité, exceptions, feature flags, codes de catégories
-├── db/                  base déclarative, session, conventions de nommage, tables techniques (compteurs D-16)
+├── db/                  base déclarative, session, conventions de nommage, tables techniques (compteurs D-16, supprimés si Q-37 est approuvée)
 ├── common/              noyau sans règle métier : Money, Quantity, Clock, Actor, pagination, identifiants, codes de référence
 ├── integrations/        interfaces et adaptateurs (stockage, email), outbox d'envoi (D-20)
 ├── modules/<module>/    un dossier par module métier, créé au jour de son implémentation
@@ -122,7 +122,7 @@ Aucun fichier vide n'est créé pour un module futur (RJ section 2).
 | D-09 | **Ordre de verrouillage**, règle générale :<br>1. lecture sans verrou ;<br>2. verrouillage dans l'ordre croissant des niveaux de modules (RFQ → quotation → négociation → Trade → Payment Record / expédition) ;<br>3. le parent est toujours verrouillé avant toute insertion d'une ligne fille ;<br>4. le compteur de références en dernier ;<br>5. revérification. | Proposé (C18) |
 | D-09 | **Idempotence** des actions critiques : contrôle d'état sous verrou et contrainte d'unicité en dernier rempart. Un second appel identique renvoie le résultat existant ; un appel contradictoire reçoit 409. `Idempotency-Key` : non requis en V1. | Proposé |
 | D-09 | Interblocage (`40P01`), conflit de sérialisation (`40001`) ou attente de verrou expirée (`55P03`) : 409 `CONCURRENT_MODIFICATION`, que le client peut retenter. Requête annulée par `statement_timeout` (`57014`) : 503. Pas de nouvelle tentative automatique côté serveur en V1. | Proposé (C21) |
-| D-16 | **Identifiants lisibles** (`RFQ-`, `MSQ-`, `MST-`) : table technique de compteurs du socle (`db`), une ligne par préfixe (et par année si la remise à zéro annuelle est retenue, Q-37), incrémentée par une seule instruction atomique dans la transaction de création, en dernier dans l'ordre de verrouillage. Unicité sous concurrence, pas de trou en cas d'annulation. Les créations d'un même préfixe sont sérialisées. Format : Q-37. | Proposé (Q-37) |
+| D-16 | **Identifiants lisibles** (`RFQ-`, `MSQ-`, `MST-`) : table technique de compteurs du socle (`db`), une ligne par préfixe (et par année si la remise à zéro annuelle est retenue, Q-37), incrémentée par une seule instruction atomique dans la transaction de création, en dernier dans l'ordre de verrouillage. Unicité sous concurrence, pas de trou en cas d'annulation. Les créations d'un même préfixe sont sérialisées. Format : Q-37. | Proposé (Q-37). **Jour 3 : remplacement PROPOSED** par un suffixe aléatoire sans compteur (Q-37, [registre](../decisions/architecture-decisions.md) ; [indexes-and-constraints.md](indexes-and-constraints.md) §4.3) |
 
 ## 6. Configuration et environnements
 
@@ -186,7 +186,7 @@ Classée V1 (A), mais prévue par aucun jour de la roadmap backend (SRC-18). Pla
 |---|---|---|
 | D-17 | Flags déclarés dans la configuration sous les noms du CdC (`VANILLA_ENABLED`…), lus au démarrage. Activation à chaud par l'admin : plus tard. | Proposé (Q-75) |
 | D-17 | **Module désactivé ou non développé** : routes non montées, absentes de l'OpenAPI. **Catégorie désactivée** : absente des listes publiques, création refusée (`CATEGORY_DISABLED`), données existantes conservées (Q-78). | Proposé |
-| D-30 | **Codes stables** de catégories (`vanilla`, `cloves`, `cocoa`), définis dans `core` et liés aux flags. Les modules inférieurs à `products` (`buyers` : produits d'intérêt ; `exporters` : capacités) stockent ces codes sans clé étrangère. `products` détient les métadonnées de chaque catégorie (libellés par langue, attributs), indexées par le code. Les autres référentiels (pays ISO 3166, devises ISO 4217, Incoterms, liste des certifications selon Q-20) sont aussi des codes validés par le socle. Un module de référentiel de bas niveau ne sera créé que si ces listes deviennent administrables. | Proposé (C13) |
+| D-30 | **Codes stables** de catégories (`vanilla`, `cloves`, `cocoa` ; en MAJUSCULES si Q-66 est approuvée, CF-07), définis dans `core` et liés aux flags. Les modules inférieurs à `products` (`buyers` : produits d'intérêt ; `exporters` : capacités) stockent ces codes sans clé étrangère. `products` détient les métadonnées de chaque catégorie (libellés par langue, attributs), indexées par le code. Les autres référentiels (pays ISO 3166, devises ISO 4217, Incoterms, liste des certifications selon Q-20) sont aussi des codes validés par le socle. Un module de référentiel de bas niveau ne sera créé que si ces listes deviennent administrables. | Proposé (C13) |
 | D-17 | Consultation des flags par l'admin : `GET /api/v1/admin/feature-flags`. | Proposé |
 
 ### 8.2 Mode DEMO (CdC §68)
@@ -201,8 +201,8 @@ Classée V1 (A), mais prévue par aucun jour de la roadmap backend (SRC-18). Pla
 
 | ID | Proposition | Statut |
 |---|---|---|
-| D-19 | L'API échange des **codes stables** : statuts, catégories, types de documents, codes d'erreur. Le frontend affiche les libellés traduits (BR-I18N-01). | Proposé (Q-66) |
-| D-19 | Libellés des données de référence administrables (catégories, attributs) stockés par langue dans `products` (D-30). Forme exacte : Jour 3. | Proposé (Q-66) |
+| D-19 | L'API échange des **codes stables** : statuts, catégories, types de documents, codes d'erreur. Le frontend affiche les libellés traduits (BR-I18N-01). | Proposé (Q-66). **Jour 3 : codes en MAJUSCULES PROPOSED** (Q-66, CF-07, [registre](../decisions/architecture-decisions.md)) |
+| D-19 | Libellés des données de référence administrables (catégories, attributs) stockés par langue dans `products` (D-30). Forme proposée au Jour 3 : colonne JSON par langue ([data-model.md](data-model.md) §5.12). | Proposé (Q-66) |
 | D-19 | Messages d'erreur en anglais en V1 ; le client s'appuie sur le `code`. Contenu saisi par les utilisateurs non traduit. | Proposé |
 
 ## 9. Intégrations et services externes
@@ -249,10 +249,10 @@ Classée V1 (A), mais prévue par aucun jour de la roadmap backend (SRC-18). Pla
 | D-13 | UTC partout, ISO 8601, horloge injectable | Retenu / Proposé | RJ section 1 |
 | D-14 | Decimal et NUMERIC avec devise ; chaînes seulement en entrée ; sortie par modèles Pydantic | Retenu / Proposé | RJ section 1, C29 |
 | D-15 | UUIDv7 : Python 3.14 ou PostgreSQL 18 ; sinon UUIDv4 | À VALIDER (Jour 4) | C30 |
-| D-16 | Table technique de compteurs par préfixe et par année | Proposé | Q-37 |
+| D-16 | Table technique de compteurs par préfixe et par année | Proposé ; remplacement PROPOSED au Jour 3 (suffixe aléatoire) | Q-37 |
 | D-17 | Feature flags par configuration ; module non monté ; catégorie masquée et refusée | Proposé | Q-75, Q-78 |
 | D-18 | DEMO : déploiement distinct, simulations par les cas d'usage normaux, marquage visible | Proposé | Q-67, C32 |
-| D-19 | Codes stables dans l'API, traduction côté frontend | Proposé | Q-66 |
+| D-19 | Codes stables dans l'API, traduction côté frontend ; casse MAJUSCULE PROPOSED au Jour 3 (CF-07) | Proposé | Q-66 |
 | D-20 | Pas d'infrastructure asynchrone au départ ; outbox du socle, envoi après validation | Proposé | RJ 31, C14 |
 | D-21 | Interfaces et adaptateurs pour toute dépendance externe | Retenu / Proposé | CdC §57 |
 | D-22 | Stockage de fichiers abstrait : local en dev, S3-compatible en prod | Retenu | RJ 29 |
@@ -261,9 +261,9 @@ Classée V1 (A), mais prévue par aucun jour de la roadmap backend (SRC-18). Pla
 | D-25 | Objet hors périmètre de l'acteur : 404, comme un objet inexistant | Proposé | S-15 |
 | D-26 | Migrations appliquées comme étape de déploiement, jamais au démarrage | Proposé | Audit D |
 | D-27 | Python 3.14 recommandé (dernière stable, UUIDv7 natif, identique au poste), sous réserve de compatibilité des dépendances au Jour 4 ; sinon 3.13 ou 3.12 | À VALIDER (Jour 4) | RJ 4 |
-| D-28 | **Statut de compte porté par l'organisation** (`organizations`, niveau 3), pour que l'acteur puisse être construit sans import montant. Valeurs :<br>- organisations acheteuses : statuts du CdC §10 (Pending, Active, Suspended, Blocked) ;<br>- organisations exportatrices : à définir (Q-12). Le CdC §36 prévoit Approve, Reject, Suspend et Reactivate, et un rejet n'a pas d'état cible dans la liste acheteur.<br><br>`buyers` et `exporters` orchestrent les décisions en appelant `organizations`. L'utilisateur (`auth`) porte ses propres états (email vérifié, compte désactivé). | Proposé (emplacement) / À VALIDER (statuts exportateur, Q-12), avant le Jour 3 | C1, Q-11, Q-12, Q-13 |
+| D-28 | **Statut de compte porté par l'organisation** (`organizations`, niveau 3), pour que l'acteur puisse être construit sans import montant. Valeurs :<br>- organisations acheteuses : statuts du CdC §10 (Pending, Active, Suspended, Blocked) ;<br>- organisations exportatrices : à définir (Q-12). Le CdC §36 prévoit Approve, Reject, Suspend et Reactivate, et un rejet n'a pas d'état cible dans la liste acheteur.<br><br>`buyers` et `exporters` orchestrent les décisions en appelant `organizations`. L'utilisateur (`auth`) porte ses propres états (email vérifié, compte désactivé). | Proposé (emplacement). Jour 3 : statuts exportateur **PROPOSED** (Q-12), portés par chaque capacité de l'organisation ([data-model.md](data-model.md) §5.4) ; conflits CF-01 et CF-02 ([registre](../decisions/architecture-decisions.md)) | C1, Q-11, Q-12, Q-13 |
 | D-29 | Écritures de sécurité qui doivent survivre à un refus : enregistrées pendant la requête, exécutées après l'annulation de la transaction principale dans une transaction distincte, fournies par le module propriétaire (`auth`, `audit`) | Proposé | C2, revue finale |
-| D-30 | Codes stables pour catégories et référentiels ; métadonnées des catégories dans `products` ; tables techniques (compteurs, outbox) dans le socle | Proposé | C13, C14 |
+| D-30 | Codes stables pour catégories et référentiels ; métadonnées des catégories dans `products` ; tables techniques (compteurs tant que D-16 est maintenue, outbox) dans le socle | Proposé | C13, C14 |
 | D-31 | Contrats inter-modules : DTO immuables (`contracts.py`). Seule exception : les projections de lecture (`projections.py`), qui renvoient une requête `Select` limitée aux colonnes autorisées. L'acteur est défini dans `common` et construit par `access_control` : utilisateur, organisation, statut, permissions, session (avec indicateur de second facteur), instant d'authentification (S-35), acteur Système (S-58), intervention « pour le compte de » (S-32) | Proposé | C15, revue finale |
 | D-32 | Choix explicite du schéma de réponse selon l'audience retournée par la politique ; jamais d'union de schémas résolue automatiquement par Pydantic (risque de servir le schéma admin) ; un chemin par audience quand c'est possible | Proposé | C16 |
 | D-33 | Un cas d'usage multi-modules appartient au module de plus haut niveau concerné. En particulier, l'acceptation (directe ou après négociation) est orchestrée par `trades`, sur un chemin unique. | Proposé | C26, C35 |

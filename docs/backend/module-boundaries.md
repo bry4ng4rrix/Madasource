@@ -17,7 +17,7 @@ Jour 2 · 2026-10-12 · Statut : proposition à valider (décisions D-05, D-06, 
 
 ## 2. Catalogue des modules
 
-Les entités sont indicatives : le modèle de données est l'objet du Jour 3.
+Les entités sont indicatives. Le modèle proposé au Jour 3, qui fait foi, est dans [data-model.md](data-model.md) ; il applique les réponses PROPOSED du 2026-10-13 ([registre des décisions](../decisions/architecture-decisions.md)) : capacités et invitations (`organizations`, Q-09, Q-10), rôle porté par l'adhésion et rôles de plateforme (Q-10, Q-74), conventions du Trade (Q-82, provisoire).
 
 | Module | Niveau | Responsabilité | Entités possédées (proposé) | Jours |
 |---|---|---|---|---|

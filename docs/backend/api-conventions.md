@@ -151,8 +151,8 @@ Les chemins sont en minuscules, avec un tiret entre les mots (`rfq-inbox`). Les 
 
 | Élément | Convention | Exemple | Statut |
 |---|---|---|---|
-| Statuts | Codes en `snake_case` minuscule, stables, dérivés des noms du CdC | `sent_to_exporters`, `trade_confirmed`, `on_hold` | Proposé (D-19) |
-| Catégories | Codes minuscules | `vanilla`, `cloves`, `cocoa` | Proposé |
+| Statuts | Codes stables, dérivés des noms du CdC. Jour 2 : `snake_case` minuscule (`sent_to_exporters`). **Jour 3 : MAJUSCULES PROPOSED** (Q-66, CF-07) : `SENT_TO_EXPORTERS`, `TRADE_CONFIRMED`, `ON_HOLD` | `SENT_TO_EXPORTERS` | Proposé (D-19, Q-66) |
+| Catégories | Codes stables ; MAJUSCULES PROPOSED au Jour 3 (CF-07, CF-09) | `VANILLA`, `CLOVES`, `COCOA` | Proposé (Q-66) |
 | Incoterms | Abréviation officielle en majuscules | `FOB`, `CFR`, `CIF` | Proposé |
 | Pays | ISO 3166-1 alpha-2 | `DE`, `MG` | Proposé |
 | Ports | UN/LOCODE | `DEHAM` (Hambourg) | Proposé, référentiel à valider |
@@ -183,6 +183,7 @@ Les libellés affichés (en anglais ou en français) sont produits par le fronte
 | `Retry-After` | Avec 429 et 503 | Proposé |
 | `X-MadaSource-Mode: demo` | Réponse d'une instance DEMO. En complément, les références lisibles y portent un préfixe DEMO, visible dans le corps (D-18, S-57). | Proposé |
 | `Accept-Language` | Non exploité en V1 (D-19) | Proposé |
+| `X-Organization-Id` | Organisation active de la requête, pour un utilisateur membre de plusieurs organisations. L'adhésion active est vérifiée à chaque requête ; la valeur n'est jamais une preuve d'autorisation. Sans en-tête : organisation unique de l'utilisateur, sinon 400. Sans objet pour un admin de plateforme. | PROPOSED (Q-74), nom à valider |
 
 ## 12. Codes de statut HTTP
 

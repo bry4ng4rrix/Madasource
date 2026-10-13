@@ -11,6 +11,11 @@ Le terme anglais est celui qui sera utilisé dans le code, l'API et les statuts.
 | Organization | Organisation | Entité juridique cliente (société acheteuse ou exportatrice). Unité d'isolation des données. Proposé : une organisation interne MadaSource pour les administrateurs (Q-74). | CdC §54 |
 | User | Utilisateur | Personne disposant d'un compte, membre d'une organisation. Appartenance à plusieurs organisations : Q-74. | CdC §54 |
 | Membership | Adhésion | Lien entre un utilisateur, une organisation et un rôle. | RJ 9 |
+| Organization capability (`BUYER`, `EXPORTER`) | Capacité commerciale | (J3, PROPOSED) Fonction exercée par une organisation sur la plateforme : acheteuse, exportatrice, ou les deux. Porte le statut du compte pour cette fonction. À ne pas confondre avec la capacité de production (Capacity Record). | Q-09, Q-12 |
+| Membership role (`OWNER`, `MEMBER`) | Rôle d'adhésion | (J3, PROPOSED) Rôle d'un utilisateur dans une organisation : OWNER gère le profil, les membres et les invitations ; MEMBER utilise les fonctions autorisées. | Q-10 |
+| Invitation | Invitation | (J3, PROPOSED) Proposition d'adhésion envoyée par un OWNER, à usage unique, avec expiration. | Q-10 |
+| Platform role (`MADASOURCE_ADMIN`) | Rôle de plateforme | (J3, PROPOSED) Rôle d'un administrateur MadaSource, indépendant de toute organisation cliente. | Q-10, Q-74 |
+| Active organization | Organisation active | (J3, PROPOSED) Organisation dans le contexte de laquelle une requête est autorisée, pour un utilisateur membre de plusieurs organisations. | Q-74 |
 | Role | Rôle | Ensemble de permissions. V1 : Buyer, Exporter, MadaSource Admin. | CdC §53 |
 | Permission | Permission | Droit élémentaire d'effectuer une action sur un type de ressource. | CdC §53 |
 | Buyer / International Buyer | Acheteur international | Organisation qui importe et achète des produits malgaches via la plateforme. | CdC §2, §10 |
@@ -98,6 +103,7 @@ Le terme anglais est celui qui sera utilisé dans le code, l'API et les statuts.
 | Trade | Transaction | Opération commerciale confirmée entre un acheteur et un exportateur, née d'une acceptation. | CdC §22-23 |
 | Trade ID | Identifiant de transaction | Référence centrale unique du type `MST-2026-000145` (format exact : Q-37), à laquelle se rattachent tous les objets du Trade. | CdC §22, §66 |
 | Trade Item | Ligne de transaction | Détail produit d'un Trade. | CdC §55 |
+| Trade Agreement (`SALE`, `SUPPLY`, `DIRECT`) | Convention | (J3, provisoire) Relation commerciale d'un Trade, avec ses propres prix et termes figés. Modèle A : vente acheteur ↔ MadaSource (`SALE`) et approvisionnement MadaSource ↔ exportateur (`SUPPLY`). Modèle B : relation directe (`DIRECT`). | Q-82 (PROPOSED) |
 | Trade Status | Statut de transaction | État de la machine d'état du Trade (CdC §24). | CdC §24 |
 | Trade Event | Événement de transaction | Entrée immuable de l'historique d'un Trade. | CdC §25, RJ 28 |
 | Trade Journey / Timeline | Parcours de transaction / Chronologie | Vue chronologique des événements, de la RFQ à la clôture. | CdC §25 |
@@ -143,6 +149,8 @@ Le terme anglais est celui qui sera utilisé dans le code, l'API et les statuts.
 | Terme | Définition | Source |
 |---|---|---|
 | Feature flag | Interrupteur de configuration qui active ou désactive une catégorie ou un module. | CdC §71 |
+| Visibility (`BUYER_VISIBLE`, `EXPORTER_VISIBLE`, `BOTH_PARTIES`, `INTERNAL_ONLY`) | (J3, PROPOSED) Classification d'un document ou d'un texte partagé, qui restreint l'audience de lecture sans jamais l'étendre. Voir [data-classification.md](data-classification.md). | Q-82 |
+| PROPOSED / APPROVED / SUPERSEDED | Statuts du [registre des décisions](../decisions/architecture-decisions.md) : proposition non approuvée, décision approuvée, décision remplacée. | Q-NN |
 | DEMO MODE | Mode démonstration clairement identifié, qui simule certains services externes sans jamais présenter une donnée simulée comme réelle. | CdC §68 |
 | Integration layer | Couche d'intégration par laquelle passeront les API tierces futures. | CdC §57 |
 | API-first | Conception où toute fonctionnalité est d'abord exposée par l'API. | CdC §56 |

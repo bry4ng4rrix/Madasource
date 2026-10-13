@@ -96,15 +96,16 @@ Format : question — contexte — jour bloqué ou influencé.
 
 ### 4.2 Comptes et organisations
 
-- **Q-09** — Une organisation peut-elle être à la fois acheteuse et exportatrice ? — CdC §54 — J9.
-- **Q-10** — Rôles internes à une organisation (directeur, commercial, opérations) : activés en V1 ou un seul rôle par organisation ? Qui invite les membres ? — CdC §54 — J9.
+- **Q-09** — Une organisation peut-elle être à la fois acheteuse et exportatrice ? — CdC §54 — J9. **Réponse reçue le 2026-10-13 : PROPOSED, non approuvée** ([registre des décisions](../decisions/architecture-decisions.md)).
+- **Q-10** — Rôles internes à une organisation (directeur, commercial, opérations) : activés en V1 ou un seul rôle par organisation ? Qui invite les membres ? — CdC §54 — J9. **Réponse reçue le 2026-10-13 : PROPOSED, non approuvée** ([registre des décisions](../decisions/architecture-decisions.md)).
 - **Q-11** — Compte acheteur : droits en Pending, validation admin obligatoire, différence entre Suspended et Blocked, réversibilité de Blocked. — CdC §10, §35 — J13.
-- **Q-12** — Statuts du compte exportateur (distincts de la vérification). Un exportateur non vérifié peut-il publier, recevoir des RFQ, envoyer des quotations ? — CdC §11, §36 — J14, J15.
+- **Q-12** — Statuts du compte exportateur (distincts de la vérification). Un exportateur non vérifié peut-il publier, recevoir des RFQ, envoyer des quotations ? — CdC §11, §36 — J14, J15. **Réponse reçue le 2026-10-13 : PROPOSED, non approuvée** ([registre des décisions](../decisions/architecture-decisions.md)).
 - **Q-13** — Lien entre la vérification d'email et le statut du compte. — RJ 11 — J11.
 - **Q-14** — Procédure de création du premier administrateur et des comptes admin suivants. — RJ 10 — J10.
-- **Q-74** — Un utilisateur peut-il appartenir à plusieurs organisations ? Les administrateurs appartiennent-ils à une organisation interne « MadaSource » ? Proposition : un admin n'est jamais membre d'une organisation cliente (S-33). — CdC §54 — J3, J9.
+- **Q-74** — Un utilisateur peut-il appartenir à plusieurs organisations ? Les administrateurs appartiennent-ils à une organisation interne « MadaSource » ? Proposition : un admin n'est jamais membre d'une organisation cliente (S-33). — CdC §54 — J3, J9. **Réponse reçue le 2026-10-13 : PROPOSED, non approuvée** ([registre des décisions](../decisions/architecture-decisions.md)).
 - **Q-76** — Durée de vie des tokens d'accès et de rafraîchissement, rotation, politique de mot de passe (longueur, complexité), verrouillage après échecs de connexion. — RJ 10 (« selon les règles validées ») — J8, J10.
 - **Q-80** — (J2) Second facteur d'authentification obligatoire pour les administrateurs ? Proposé, ou obligatoire, pour les utilisateurs des organisations clientes ? — CdC §60 ; S-09 — J10.
+- **Q-97** — (J3) Le motif d'un changement de statut de compte (suspension, blocage, clôture) est-il communiqué à l'organisation concernée ? Proposition : un motif communiqué distinct de la note interne, comme pour la vérification (S-47). — CdC §10, §35-36 ; data-classification.md — J11, J13.
 
 ### 4.3 Vérification
 
@@ -128,11 +129,12 @@ Format : question — contexte — jour bloqué ou influencé.
 - **Q-22** — Champs obligatoires d'une RFQ (et du profil acheteur). — CdC §10, §12 — J13, J19.
 - **Q-23** — Modification, annulation et expiration d'une RFQ après soumission. — RJ 20 — J20.
 - **Q-24** — États manquants (annulée, aucun exportateur compatible, aucune quotation) ; déclencheur de « Quotations Received » (première ou toutes) et de « Closed » ; statuts côté destinataire (Sent, Responded, Declined). — CdC §12, §15 — J19, J21.
-- **Q-25** — Une RFQ porte-t-elle sur une catégorie (« Vanilla ») ou sur un produit précis d'un exportateur ? Plusieurs produits par RFQ (RFQItems) ? RFQ adressée directement à un exportateur choisi ? — CdC §12, §55 — J19.
+- **Q-25** — Une RFQ porte-t-elle sur une catégorie (« Vanilla ») ou sur un produit précis d'un exportateur ? Plusieurs produits par RFQ (RFQItems) ? RFQ adressée directement à un exportateur choisi ? — CdC §12, §55 — J19. **Réponse reçue le 2026-10-13 : PROPOSED, non approuvée** ([registre des décisions](../decisions/architecture-decisions.md)).
 - **Q-26** — Plusieurs quotations acceptées pour une même RFQ (achat réparti entre exportateurs) ? — CdC §22 — J27.
 - **Q-27** — Identité de l'acheteur visible par l'exportateur dans l'inbox (l'exemple du §15 ne montre que le pays) ; moment où elle est révélée. La règle vaut aussi pour les champs « auteur » des historiques et des documents (S-48). — CdC §15 — J21.
 - **Q-28** — « Request a Quote » du site public : compte acheteur obligatoire ? Formulaire « Contact » géré par le backend ? — CdC §4 — J18, J20.
 - **Q-29** — RFQ en langage naturel : confirmée hors V1 ? — CdC §13 — J19.
+- **Q-95** — (J3) Avec des RFQ à plusieurs lignes et plusieurs Trades possibles (Q-25, PROPOSED), que signifient les statuts Accepted et Closed de la RFQ ? Proposition : Accepted dès la première acceptation ; Closed quand toutes les lignes sont attribuées, déclinées ou expirées. — CdC §12 ; data-model.md §7 — J19, J27.
 - **Q-84** — (J2) Une question d'exportateur sur une RFQ reste-t-elle privée entre lui et l'acheteur, ou la réponse est-elle diffusée, anonymisée, à tous les destinataires ? — CdC §15, §28 ; S-31 — J21, J30.
 - **Q-85** — (J2) Champs de la RFQ visibles par l'exportateur destinataire : prix cible (en Modèle A, c'est un prix final, qui renseigne sur la marge), préférence de paiement, port, exigences supplémentaires ? — CdC §12, §15 ; S-50 — J21.
 
@@ -148,7 +150,8 @@ Format : question — contexte — jour bloqué ou influencé.
 - **Q-34** — Cycle de vie d'une quotation (brouillon, soumise, retirée, refusée…) ; modification ou retrait par l'exportateur. — CdC §18 — J24, J25.
 - **Q-35** — Seuil de « Expiring » ; durée de validité par défaut éventuelle ; heure exacte d'expiration. — CdC §18 — J25.
 - **Q-36** — Prolongation ou réactivation d'une quotation expirée : autorisée ? Par qui ? — RJ 25 — J25.
-- **Q-37** — Format exact des identifiants (`RFQ-AAAA-NNNN` ou 6 chiffres ; `MSQ` sur 4 ou 6 chiffres) ; remise à zéro annuelle. Des références séquentielles révèlent le volume d'activité de la plateforme : est-ce acceptable (S-54) ? — CdC §16, §66 — J19, J24, J27.
+- **Q-37** — Format exact des identifiants (`RFQ-AAAA-NNNN` ou 6 chiffres ; `MSQ` sur 4 ou 6 chiffres) ; remise à zéro annuelle. Des références séquentielles révèlent le volume d'activité de la plateforme : est-ce acceptable (S-54) ? — CdC §16, §66 — J19, J24, J27. **Réponse reçue le 2026-10-13 : PROPOSED, non approuvée** ([registre des décisions](../decisions/architecture-decisions.md)).
+- **Q-94** — (J3) Un exportateur peut-il soumettre plusieurs quotations distinctes (variantes) pour une même RFQ ? Proposition : non, une quotation par exportateur et par RFQ, modifiée par versions (S-43). — CdC §16-18 ; data-model.md §5.14 — J24.
 
 ### 4.8 Négociation
 
@@ -164,7 +167,7 @@ Format : question — contexte — jour bloqué ou influencé.
 - **Q-44** — On Hold et Disputed : depuis quels états, retour à l'état précédent ? — CdC §24 — J28.
 - **Q-45** — Conditions de paiement autres que le prépaiement en V1 ? — CdC §16, §24 — J28, J33.
 - **Q-46** — Inspection : simple événement de timeline en V1 ? — CdC §25 — J28.
-- **Q-82** — (J2) En Modèle A, quels objets d'un Trade sont partagés entre acheteur et exportateur, et lesquels restent bilatéraux avec MadaSource : termes, documents commerciaux et de paiement, Payment Records, commentaires de timeline, litiges ? Quelle contrepartie est affichée à chacun (MadaSource ou l'autre partie) ? — CdC §2, §23, §30, §61 ; S-39, S-40 — J3, J24 à J33, **bloque J27**.
+- **Q-82** — (J2) En Modèle A, quels objets d'un Trade sont partagés entre acheteur et exportateur, et lesquels restent bilatéraux avec MadaSource : termes, documents commerciaux et de paiement, Payment Records, commentaires de timeline, litiges ? Quelle contrepartie est affichée à chacun (MadaSource ou l'autre partie) ? — CdC §2, §23, §30, §61 ; S-39, S-40 — J3, J24 à J33, **bloque J27**. **Réponse reçue le 2026-10-13 : PROPOSED, non approuvée** ([registre des décisions](../decisions/architecture-decisions.md)).
 
 ### 4.10 Documents
 
@@ -172,6 +175,7 @@ Format : question — contexte — jour bloqué ou influencé.
 - **Q-48** — Statuts de document, taille maximale, analyse antivirus, durée de conservation. — CdC §26 — J29.
 - **Q-49** — Stockage : fournisseur S3-compatible, localisation géographique des données. — RJ 29 — J29.
 - **Q-83** — (J2) Gouvernance de la visibilité des documents : qui fixe l'audience (déposant, admin) ? Valeur par défaut par catégorie ? Validation admin avant partage ? Retrait d'un partage ? Traitement des métadonnées embarquées des documents bureautiques (auteur, suivi des modifications) ? — CdC §26, §61 ; S-24, S-27 — J29.
+- **Q-96** — (J3) Valeurs de visibilité à ajouter aux quatre valeurs de Q-82 : `OWNER_ONLY` (objets d'une seule organisation : société, vérification, catalogue) et `PUBLIC` (médias du marketplace : logo, photos de produits publiés) ? — Q-82 ; data-classification.md §2 — J14, J29.
 
 ### 4.11 Messagerie et notifications
 
@@ -214,9 +218,9 @@ Format : question — contexte — jour bloqué ou influencé.
 ### 4.17 Transverse
 
 - **Q-65** — Conversion de devises en V1 ? Source des taux (saisie manuelle par l'admin ?) ? Comparaison de quotations en devises différentes ? — CdC §59 — J24, J25.
-- **Q-66** — i18n : libellés traduits (catégories, attributs, statuts, erreurs) servis par l'API ou gérés par le frontend ? — CdC §58 — J2, J16.
-- **Q-67** — Mode DEMO : environnement séparé (recommandé) ou enregistrements marqués dans la même base ? Qui l'active ? Accès à l'instance (sur invitation ?), préfixe distinct des identifiants, emails désactivés (S-57) ? — CdC §68 — J2, J3.
-- **Q-68** — Conformité des données personnelles (RGPD pour les acheteurs européens, loi malgache) : base légale, conservation, droit à l'effacement face à l'audit immuable. — CdC §60-61 — J3, J12.
+- **Q-66** — i18n : libellés traduits (catégories, attributs, statuts, erreurs) servis par l'API ou gérés par le frontend ? — CdC §58 — J2, J16. **Réponse reçue le 2026-10-13 : PROPOSED, non approuvée** ([registre des décisions](../decisions/architecture-decisions.md)).
+- **Q-67** — Mode DEMO : environnement séparé (recommandé) ou enregistrements marqués dans la même base ? Qui l'active ? Accès à l'instance (sur invitation ?), préfixe distinct des identifiants, emails désactivés (S-57) ? — CdC §68 — J2, J3. **Réponse reçue le 2026-10-13 : PROPOSED, non approuvée** ([registre des décisions](../decisions/architecture-decisions.md)).
+- **Q-68** — Conformité des données personnelles (RGPD pour les acheteurs européens, loi malgache) : base légale, conservation, droit à l'effacement face à l'audit immuable. — CdC §60-61 — J3, J12. **Réponse reçue le 2026-10-13 : PROPOSED, non approuvée** ([registre des décisions](../decisions/architecture-decisions.md)).
 - **Q-69** — Durée de conservation des journaux d'audit, documents, messages. — CdC §52 — J12, J29.
 - **Q-70** — Fuseau de référence pour les échéances exprimées en jours (UTC, Madagascar, fuseau de l'acheteur). — CdC §18 — J25.
 - **Q-71** — Mise à jour au Jour 2 : le cahier des charges a été versionné et poussé sur le dépôt distant le 2026-10-12 (commit c6e27d8). À confirmer **en urgence** : le dépôt est-il privé, et ce document client peut-il y rester ? Même question pour `CLAUDE.md` et les deux roadmaps, retirés de l'index mais présents dans l'historique poussé. — R-26 — immédiat.
@@ -230,25 +234,27 @@ Format : question — contexte — jour bloqué ou influencé.
   - `messages` au Jour 30, dès le Jour 21 ;
   - `notifications` au Jour 31, dès le Jour 13.
 
-  Accepter le rétro-branchement à leur jour (ajout des appels et des tests dans les modules antérieurs), ou anticiper un noyau minimal ? Recommandation : rétro-branchement pour `audit` et `notifications`, conforme à RJ 12 et RJ 31 ; noyau minimal du coffre documentaire au Jour 14. Cela alourdit le Jour 14 et allège le Jour 29. — module-boundaries.md §11 — **avant J9**.
+  Accepter le rétro-branchement à leur jour (ajout des appels et des tests dans les modules antérieurs), ou anticiper un noyau minimal ? Recommandation : rétro-branchement pour `audit` et `notifications`, conforme à RJ 12 et RJ 31 ; noyau minimal du coffre documentaire au Jour 14. Cela alourdit le Jour 14 et allège le Jour 29. — module-boundaries.md §11 — **avant J9**. **Réponse reçue le 2026-10-13 : PROPOSED, avec un point non résolu (CF-08)** ([registre des décisions](../decisions/architecture-decisions.md) ; [dependency-graph.md](dependency-graph.md)).
 
 ### 4.18 Questions bloquantes par jour (synthèse)
 
 | Jour | Questions à trancher avant le jour |
 |---|---|
 | Immédiat | **Q-71** (confidentialité du dépôt distant) |
-| J2-J3 (architecture, données) | Q-09, Q-10, Q-12 (statuts exportateur, D-28), Q-25, Q-37, Q-66, Q-67, Q-68, Q-74, Q-75, Q-82 |
-| Avant J9 (planification) | **Q-93** (ordre de construction) |
+| J2-J3 (architecture, données) | Q-09, Q-10, Q-12, Q-25, Q-37, Q-66, Q-67, Q-68, Q-74, Q-82 : **réponses reçues le 2026-10-13, PROPOSED**, à approuver ([registre des décisions](../decisions/architecture-decisions.md)). Reste ouverte : Q-75. |
+| Avant J9 (planification) | Q-93 : réponse PROPOSED reçue ; point non résolu CF-08 / SQ-02, à trancher **avant J14** ([dependency-graph.md](dependency-graph.md)) |
 | J4 (initialisation du dépôt) | Q-79 |
-| J8-J15 (sécurité, accès, comptes, vérification) | Q-10, Q-11, Q-12, Q-13, Q-14, Q-15, Q-16, Q-74, Q-76, Q-80, Q-81, Q-87, Q-89, Q-90 |
+| J8-J15 (sécurité, accès, comptes, vérification) | Q-11, Q-13, Q-14, Q-15, Q-16, Q-76, Q-80, Q-81, Q-87, Q-89, Q-90, Q-96, Q-97 ; approbation de Q-09, Q-10, Q-12, Q-74 ; SQ-01, **SQ-02** |
 | J16-J18 (produits, marketplace) | Q-06, Q-17, Q-18, Q-19, Q-20, Q-21, Q-77, Q-78, Q-86 |
-| J19-J23 (RFQ, matching) | Q-22, Q-23, Q-24, Q-25, Q-27, Q-30, Q-31, Q-32, Q-84, Q-85 |
-| J24-J27 (quotations, négociation, Trade) | **Q-01**, Q-02, Q-03, Q-04, **Q-05**, Q-26, Q-34, Q-35, Q-38, **Q-82**, Q-91 |
-| J28-J35 (opérations) | **Q-41**, **Q-42**, Q-43, Q-47, Q-53, **Q-54**, Q-58, Q-59, Q-61, Q-62, Q-83, Q-88, Q-92 |
+| J19-J23 (RFQ, matching) | Q-22, Q-23, Q-24, Q-27, Q-30, Q-31, Q-32, Q-84, Q-85, Q-95 ; approbation de Q-25, Q-37 ; **SQ-03** (avant J21), SQ-04 |
+| J24-J27 (quotations, négociation, Trade) | **Q-01**, Q-02, Q-03, Q-04, **Q-05**, Q-26, Q-34, Q-35, Q-38, **Q-82** (approbation), Q-91, Q-94 ; **SQ-05** (avant J24) |
+| J28-J35 (opérations) | **Q-41**, **Q-42**, Q-43, Q-47, Q-53, **Q-54**, Q-58, Q-59, Q-61, Q-62, Q-83, Q-88, Q-92, Q-96 |
 
 ## 5. Décisions prises
 
-Aucune décision explicite du client à ce jour.
+Aucune décision **approuvée** à ce jour.
+
+Le 2026-10-13, le responsable produit a transmis des réponses à 11 questions (Q-09, Q-10, Q-12, Q-25, Q-37, Q-66, Q-67, Q-68, Q-74, Q-82, Q-93). À sa demande, elles sont enregistrées comme **propositions (PROPOSED)**, non comme décisions, dans le [registre des décisions](../decisions/architecture-decisions.md), avec les conflits relevés face au CdC (CF-01 à CF-09). Ce tableau ne sera rempli qu'à l'approbation explicite de chacune.
 
 Fait constaté le 2026-10-12 : l'utilisateur a versionné le cahier des charges dans le dépôt (commit c6e27d8). La question de confidentialité (Q-71) reste ouverte.
 

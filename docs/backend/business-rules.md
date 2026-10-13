@@ -217,9 +217,9 @@ Les exemples chiffrés du CdC (USD 40/kg, marge de USD 3,30, validité de 7 jour
 
 | ID | Règle | Source | Statut |
 |---|---|---|---|
-| BR-REF-01 | RFQ, Quotation et Trade portent un identifiant lisible préfixé (`RFQ-`, `MSQ-`, `MST-`), suivi de l'année et d'un numéro séquentiel. | CdC §16, §22, §66 | Défini |
+| BR-REF-01 | RFQ, Quotation et Trade portent un identifiant lisible préfixé (`RFQ-`, `MSQ-`, `MST-`), suivi de l'année et d'un suffixe. Le CdC ne donne que des exemples d'apparence séquentielle (`RFQ-2026-0012`, `MST-2026-000145`), sans exiger de séquence (correction du Jour 3). | CdC §16, §22, §66 | Défini (préfixe, année) |
 | BR-REF-02 | L'identifiant est généré par le serveur, unique, jamais réutilisé, sûr en cas de concurrence, et jamais codé en dur (y compris l'exemple `MST-2026-000145`). | RJ 27 | Défini |
-| BR-REF-03 | Nombre de chiffres, remise à zéro annuelle, année de référence (création, UTC). | CdC §16 vs §66 | À VALIDER (Q-37) |
+| BR-REF-03 | Nombre de chiffres, remise à zéro annuelle, année de référence (création, UTC). Réponse du 2026-10-13 : suffixe aléatoire de 6 caractères, sans remise à zéro (`RFQ-2026-K7M4Q9`). | CdC §16 vs §66 | PROPOSED (Q-37, CF-04) |
 
 ## 19. Devises, temps et langues
 
