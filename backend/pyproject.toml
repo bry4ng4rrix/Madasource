@@ -1,0 +1,67 @@
+[project]
+name = "madasource-backend"
+version = "0.1.0"
+description = "API REST du backend MadaSource (FastAPI)"
+readme = "README.md"
+requires-python = ">=3.14,<3.15"
+# Versions épinglées exactement ; les dépendances transitives sont figées par uv.lock.
+# Justification de chaque dépendance : backend/README.md, section « Dépendances ».
+dependencies = [
+    "fastapi==0.143.0",
+    "uvicorn==0.54.0",
+    "pydantic==2.14.1",
+    "sqlalchemy[asyncio]==2.1.4",
+    "asyncpg==0.32.0",
+    "alembic==1.20.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==9.1.1",
+    "httpx==0.28.1",
+    "ruff==0.17.0",
+    "mypy==2.4.0",
+]
+
+[tool.uv]
+# Application, pas bibliothèque : uv installe les dépendances sans empaqueter le projet.
+package = false
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes
+    "I",        # tri des imports
+    "B",        # bugbear
+    "UP",       # syntaxe moderne
+    "S",        # sécurité (bandit)
+    "ASYNC",    # erreurs courantes en asyncio
+    "DTZ",      # datetime naïfs interdits
+    "SIM",      # simplifications
+    "PT",       # style pytest
+    "T20",      # pas de print
+    "RUF",      # règles propres à Ruff
+]
+
+[tool.ruff.lint.per-file-ignores]
+# S101 : `assert` est le mécanisme d'assertion de pytest ; il reste interdit dans app/.
+"tests/**" = ["S101"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["app", "tests"]
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = ["-ra", "--strict-markers", "--strict-config"]
+xfail_strict = true
+filterwarnings = ["error"]
