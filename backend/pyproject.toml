@@ -18,7 +18,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest==9.1.1",
-    "httpx==0.28.1",
+    "httpx2==2.13.1",
     "ruff==0.17.0",
     "mypy==2.4.0",
 ]
@@ -30,7 +30,6 @@ package = false
 [tool.ruff]
 target-version = "py314"
 line-length = 100
-src = ["app", "tests"]
 
 [tool.ruff.lint]
 select = [
@@ -48,6 +47,11 @@ select = [
     "RUF",      # règles propres à Ruff
 ]
 
+[tool.ruff.lint.isort]
+# `app` est le paquet du projet ; le dossier alembic/ n'est pas le paquet `alembic`.
+known-first-party = ["app"]
+known-third-party = ["alembic"]
+
 [tool.ruff.lint.per-file-ignores]
 # S101 : `assert` est le mécanisme d'assertion de pytest ; il reste interdit dans app/.
 "tests/**" = ["S101"]
@@ -56,7 +60,7 @@ select = [
 python_version = "3.14"
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["app", "tests"]
+files = ["app", "tests", "alembic/env.py"]
 
 [tool.pytest.ini_options]
 minversion = "9.0"

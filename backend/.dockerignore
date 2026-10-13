@@ -1,0 +1,14 @@
+# Contexte de build du backend : seul le nécessaire entre dans l'image.
+.env
+.env.*
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+tests/
+Dockerfile
+.dockerignore
