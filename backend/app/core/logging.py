@@ -31,8 +31,13 @@ SENSITIVE_KEY_PARTS = (
     "bic",
     "database_url",
 )
-# Attributs propres à LogRecord : tout autre attribut vient de `extra=`.
-_RECORD_ATTRIBUTES = frozenset(vars(logging.makeLogRecord({}))) | {"message", "asctime"}
+# Attributs propres à LogRecord : tout autre attribut vient de `extra=`. `color_message`
+# est ajouté par uvicorn (codes de couleur ANSI), inutile dans un journal JSON.
+_RECORD_ATTRIBUTES = frozenset(vars(logging.makeLogRecord({}))) | {
+    "message",
+    "asctime",
+    "color_message",
+}
 
 
 def _is_sensitive(key: str) -> bool:

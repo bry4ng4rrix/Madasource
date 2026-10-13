@@ -178,7 +178,7 @@ Les libellés affichés (en anglais ou en français) sont produits par le fronte
 | En-tête | Sens | Statut |
 |---|---|---|
 | `Authorization: Bearer <jeton>` | Authentification ([security-design.md](security-design.md)) | Proposé |
-| `X-Request-ID` | Corrélation : repris s'il est fourni et valide, sinon généré ; toujours renvoyé | Proposé |
+| `X-Request-ID` | Corrélation : repris s'il est fourni et s'il est un UUID (protection contre l'injection dans les journaux), sinon généré (UUIDv7) ; toujours renvoyé, y compris sur les erreurs 500 | Retenu (Jour 5) |
 | `Location` | URL de la ressource créée (201) | Proposé |
 | `Retry-After` | Avec 429 et 503 | Proposé |
 | `X-MadaSource-Mode: demo` | Réponse d'une instance DEMO. En complément, les références lisibles y portent un préfixe DEMO, visible dans le corps (D-18, S-57). | Proposé |

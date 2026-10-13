@@ -20,8 +20,8 @@ Format proposé : **Problem Details for HTTP APIs (RFC 9457)**, type de contenu 
 
 ```json
 {
-  "type": "https://<domaine-api>/problems/invalid-state-transition",
-  "title": "Invalid state transition",
+  "type": "about:blank",
+  "title": "Conflict",
   "status": 409,
   "detail": "This RFQ cannot be submitted in its current status.",
   "code": "INVALID_STATE_TRANSITION",
@@ -32,15 +32,15 @@ Format proposé : **Problem Details for HTTP APIs (RFC 9457)**, type de contenu 
 
 | Membre | Contenu | Obligatoire |
 |---|---|---|
-| `type` | URI stable dérivé du code. Il doit être fixé **avant le Jour 5**, car le changer ensuite serait un changement cassant. Deux options :<br>- `https://<domaine de l'API>/problems/<code>`, si le domaine définitif est connu (Q-17, Q-79). Le RFC 9457 encourage un URI résolvable ;<br>- sinon, un URI `tag:` sur un domaine que MadaSource contrôle.<br>Un URN `urn:madasource:` est écarté : l'espace de noms n'est pas enregistré. | Oui (forme : À VALIDER, C28) |
-| `title` | Résumé court et fixe pour un code donné, en anglais (D-19) | Oui |
+| `type` | **`about:blank`** pour toutes les erreurs (D-24, choix de l'utilisateur le 2026-10-13, Jour 5). Le domaine définitif de l'API n'étant pas connu (Q-17, Q-79), aucun URI propre n'est publié. Le sens précis est porté par `code`, contrat du client ; passer plus tard à des URI propres ne casse pas un client qui lit `code`. | Oui |
+| `title` | Phrase HTTP standard du statut (`Conflict`, `Not Found`…), exigée par la RFC 9457 §4.2.1 quand `type` vaut `about:blank` | Oui |
 | `status` | Code HTTP, identique à celui de la réponse | Oui |
 | `detail` | Explication propre à l'occurrence, sans donnée sensible (section 7) | Non |
 | `code` | Code stable en majuscules (section 4) : c'est le contrat pour le client | Oui |
 | `request_id` | Identifiant de requête, identique à l'en-tête `X-Request-ID` | Oui |
 | `errors` | Erreurs par champ, pour une validation (section 3) | Non |
 
-Statut : Proposé (D-24). RFC 9457 est retenu parce qu'il est standard et outillé.
+Statut : **Retenu** (D-24, implémenté au Jour 5 dans `backend/app/core/errors.py`). RFC 9457 est retenu parce qu'il est standard et outillé.
 
 ## 3. Erreurs de validation
 
@@ -48,8 +48,8 @@ Une donnée d'entrée invalide (corps, paramètre de chemin ou de requête) prod
 
 ```json
 {
-  "type": "https://<domaine-api>/problems/validation-error",
-  "title": "Validation error",
+  "type": "about:blank",
+  "title": "Unprocessable Content",
   "status": 422,
   "code": "VALIDATION_ERROR",
   "request_id": "…",
@@ -76,6 +76,7 @@ Le catalogue s'enrichit module par module. Un code n'est jamais réutilisé avec
 | Code | HTTP | Quand | Remarque |
 |---|---|---|---|
 | `VALIDATION_ERROR` | 422 | Données d'entrée invalides, dont paramètre de requête inconnu | Section 3 |
+| `BAD_REQUEST` | 400 | Requête mal formée hors validation de schéma (par exemple en-tête `X-Organization-Id` requis et absent) | Ajouté au Jour 5 |
 | `AUTHENTICATION_REQUIRED` | 401 | Aucun jeton fourni | |
 | `INVALID_TOKEN` | 401 | Jeton illisible, signature invalide, expiré, révoqué, ou session révoquée | Pas de distinction fine renvoyée au client ; le motif est journalisé |
 | `INVALID_CREDENTIALS` | 401 | Échec de connexion | Réponse identique que le compte existe ou non (BR-ACC-05) |
@@ -92,6 +93,7 @@ Le catalogue s'enrichit module par module. Un code n'est jamais réutilisé avec
 | `QUOTATION_EXPIRED` | 409 | Action sur une quotation ou une proposition expirée | BR-QUO-05 |
 | `OFFER_VERSION_MISMATCH` | 409 | La version de la proposition transmise n'est plus la version courante | S-43 ; le client relit la proposition |
 | `STALE_EXTERNAL_COST` | 409 | Calcul de prix fondé sur un coût externe expiré | BR-PRC-08 (comportement : Q-04) |
+| `CONFLICT` | 409 | Conflit générique avec l'état courant (`ConflictError`) | Ajouté au Jour 5 ; préférer un code précis |
 | `ALREADY_ACCEPTED` | 409 | Acceptation contradictoire alors qu'une autre proposition est déjà acceptée | La même acceptation rejouée renvoie 200 (D-09) |
 | `DUPLICATE_RESOURCE` | 409 | Violation d'une contrainte d'unicité **anticipée** sur une ressource de l'acteur | **Jamais** pour révéler qu'un email, une société ou un slug existe déjà (S-56) |
 | `CONCURRENT_MODIFICATION` | 409 | Interblocage, conflit de sérialisation, attente de verrou expirée | Le client peut retenter |
@@ -143,7 +145,7 @@ Remarques :
   - le gestionnaire 500 relit cet identifiant pour poser l'en-tête et le membre `request_id` ;
   - il ajoute aussi les en-têtes CORS des origines autorisées.
 
-  À tester dès le Jour 5.
+  **Implémenté et testé au Jour 5** (`tests/api/test_errors.py`).
 - **Réponses 401** : toujours avec un en-tête `WWW-Authenticate: Bearer`, exigé par la RFC 9110 (§15.5.2). Pour `REAUTHENTICATION_REQUIRED`, l'en-tête porte `error="insufficient_user_authentication"`, défini par la RFC 9470 (authentification renforcée).
 - Dans tous les cas, la transaction du cas d'usage est annulée avant la réponse. Les seules écritures conservées sont celles de l'unité de travail de sécurité (D-29).
 

@@ -66,3 +66,9 @@ def test_exception_is_formatted() -> None:
     line = json.loads(JsonFormatter().format(record))
 
     assert "RuntimeError: boom" in line["exception"]
+
+
+def test_uvicorn_color_message_is_dropped() -> None:
+    line = json.loads(JsonFormatter().format(_record(color_message="\x1b[36m1\x1b[0m")))
+
+    assert "color_message" not in line

@@ -21,7 +21,7 @@ Prérequis : Python 3.14, uv 0.13.0, Docker avec Compose. Installation, tests, s
 
 ## État
 
-Jour 4 de la roadmap backend : squelette du dépôt, outillage, sonde de vivacité `GET /api/v1/health/live`. Aucun workflow métier n'est encore implémenté. Le démarrage par Docker Compose n'a pas encore été vérifié. Avancement détaillé : [`check.md`](check.md).
+Jour 5 de la roadmap backend : fondation de l'API (configuration validée, sondes `GET /api/v1/health/live` et `/ready`, erreurs au format Problem Details, journaux JSON, CORS). Aucun workflow métier n'est encore implémenté. Docker Compose vérifié le 2026-10-13. Avancement détaillé : [`check.md`](check.md).
 
 ## Sécurité
 

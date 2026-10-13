@@ -128,7 +128,7 @@ Aucun fichier vide n'est créé pour un module futur (RJ section 2).
 
 | ID | Convention | Statut |
 |---|---|---|
-| D-11 | Configuration lue depuis les variables d'environnement et validée au démarrage par un objet typé (Pydantic v2 ; `pydantic-settings` à justifier au Jour 5 : le Jour 4 n'a aucune configuration applicative). Une configuration invalide empêche le démarrage. | Proposé |
+| D-11 | Configuration lue depuis les variables d'environnement et validée au démarrage par un objet typé (Pydantic v2 et `pydantic-settings` 2.15.0, retenu au Jour 5 : bibliothèque de l'équipe Pydantic, lecture et validation typée des variables d'environnement ; `backend/app/core/config.py`). Une configuration invalide empêche le démarrage. | Proposé |
 | D-11 | Environnements : `local`, `test`, `staging` (si l'hébergement en prévoit un, Q-79), `production`, `demo` (section 8.2). | Proposé |
 | D-11 | En `production`, le démarrage est refusé si : mode debug actif, secret par défaut ou trop court, `DEMO_MODE` actif, origines CORS `*`, adaptateurs de démonstration chargés. | Proposé |
 | D-11 | `.env` uniquement en local, jamais versionné. Toute variable est documentée dans `.env.example` avec une valeur factice (Jour 4). | Retenu (RJ section 1) |
@@ -259,7 +259,7 @@ Classée V1 (A), mais prévue par aucun jour de la roadmap backend (SRC-18). Pla
 | D-21 | Interfaces et adaptateurs pour toute dépendance externe | Retenu / Proposé | CdC §57 |
 | D-22 | Stockage de fichiers abstrait : local en dev, S3-compatible en prod | Retenu | RJ 29 |
 | D-23 | Statuts dérivés du temps (validité, expiration) calculés à la lecture | Proposé | BR-QUO-03 |
-| D-24 | Erreurs au format Problem Details (RFC 9457) avec code stable ; forme du membre `type` à fixer avant le Jour 5 | Proposé / À VALIDER | [error-handling.md](error-handling.md), C28 |
+| D-24 | Erreurs au format Problem Details (RFC 9457) avec code stable ; `type` = `about:blank` | Retenu (choix de l'utilisateur, Jour 5, 2026-10-13) | [error-handling.md](error-handling.md), C28 |
 | D-25 | Objet hors périmètre de l'acteur : 404, comme un objet inexistant | Proposé | S-15 |
 | D-26 | Migrations appliquées comme étape de déploiement, jamais au démarrage | Proposé | Audit D |
 | D-27 | **Python 3.14** (3.14.8 en local, image `python:3.14.8-slim-trixie`) ; PostgreSQL 18 (`postgres:18.6-trixie`). Compatibilité des dépendances vérifiée au Jour 4 (`uv sync`, tests) | Retenu (choix de l'utilisateur, Jour 4, 2026-10-13) | RJ 4 |
