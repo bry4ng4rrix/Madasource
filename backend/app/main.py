@@ -27,3 +27,10 @@ app = FastAPI(title="MadaSource API", version="0.1.0")
 async def health_live() -> LivenessResponse:
     """Indique que le processus répond. Ne consulte pas la base (sonde de vivacité)."""
     return LivenessResponse(status="ok")
+
+
+
+@app.get("/hello", tags=["hello"])
+async def hello() -> dict[str, str]:
+    """Point d'entrée de test pour vérifier que l'application fonctionne."""
+    return {"message": "Hello, MadaSource!"}

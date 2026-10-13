@@ -158,6 +158,8 @@ Aucun fichier vide n'est créé pour un module futur (RJ section 2).
   - généré par l'application, avec `uuid.uuid7()`, natif à partir de Python 3.14 (vérifié le 2026-10-12 : présent en 3.14.8, absent en 3.12.14) ;
   - généré par PostgreSQL 18 (`uuidv7()`).
   Choix au Jour 4 avec D-27 et la version de PostgreSQL. Sinon, UUIDv4.
+
+  **Jour 4 (2026-10-13)** : Python 3.14 et PostgreSQL 18 retenus par l'utilisateur. Proposition : identifiants générés par l'application (`uuid.uuid7()`), pour que la valeur soit connue avant l'insertion. Mise en œuvre au Jour 6.
 - Un UUIDv7 révèle l'instant de création. Sa partie variable fait 74 bits ; dans CPython 3.14, elle se compose d'un compteur de 42 bits et d'environ 32 bits aléatoires (C30). La protection réelle reste le contrôle d'accès ([security-design.md](security-design.md)).
 - Identifiants lisibles : D-16.
 
@@ -243,12 +245,12 @@ Classée V1 (A), mais prévue par aucun jour de la roadmap backend (SRC-18). Pla
 | D-07 | Pas de relation ORM entre modules ; clés étrangères seulement vers un module inférieur, par nom de table | Proposé | C12 |
 | D-08 | Une transaction par cas d'usage, validée par le service avant la réponse ; DTO entre modules ; horodatages fixés par l'application | Proposé | C15, C19, C20 |
 | D-09 | `FOR NO KEY UPDATE` et `populate_existing` ; ordre de verrouillage par niveau ; parent avant enfant ; idempotence | Proposé | C3, C4, C18 |
-| D-10 | Pilote PostgreSQL asynchrone : asyncpg ou psycopg 3 (la lecture des codes SQLSTATE en dépend) | À VALIDER (Jour 4) | RJ 4, C21 |
+| D-10 | Pilote PostgreSQL asynchrone : **asyncpg** 0.32.0 (la lecture des codes SQLSTATE en dépend) | Retenu (choix de l'utilisateur, Jour 4, 2026-10-13) | RJ 4, C21 |
 | D-11 | Configuration validée au démarrage, garde-fous en production | Proposé | RJ 5 |
 | D-12 | Journaux JSON nettoyés, distincts de l'audit | Proposé | RJ 5, RJ 12 |
 | D-13 | UTC partout, ISO 8601, horloge injectable | Retenu / Proposé | RJ section 1 |
 | D-14 | Decimal et NUMERIC avec devise ; chaînes seulement en entrée ; sortie par modèles Pydantic | Retenu / Proposé | RJ section 1, C29 |
-| D-15 | UUIDv7 : Python 3.14 ou PostgreSQL 18 ; sinon UUIDv4 | À VALIDER (Jour 4) | C30 |
+| D-15 | UUIDv7, généré par l'application (`uuid.uuid7()` de Python 3.14) | Proposé (découle de D-27, Jour 4) ; mise en œuvre au Jour 6 | C30 |
 | D-16 | Table technique de compteurs par préfixe et par année | Proposé ; remplacement PROPOSED au Jour 3 (suffixe aléatoire) | Q-37 |
 | D-17 | Feature flags par configuration ; module non monté ; catégorie masquée et refusée | Proposé | Q-75, Q-78 |
 | D-18 | DEMO : déploiement distinct, simulations par les cas d'usage normaux, marquage visible | Proposé | Q-67, C32 |
@@ -260,7 +262,7 @@ Classée V1 (A), mais prévue par aucun jour de la roadmap backend (SRC-18). Pla
 | D-24 | Erreurs au format Problem Details (RFC 9457) avec code stable ; forme du membre `type` à fixer avant le Jour 5 | Proposé / À VALIDER | [error-handling.md](error-handling.md), C28 |
 | D-25 | Objet hors périmètre de l'acteur : 404, comme un objet inexistant | Proposé | S-15 |
 | D-26 | Migrations appliquées comme étape de déploiement, jamais au démarrage | Proposé | Audit D |
-| D-27 | Python 3.14 recommandé (dernière stable, UUIDv7 natif, identique au poste), sous réserve de compatibilité des dépendances au Jour 4 ; sinon 3.13 ou 3.12 | À VALIDER (Jour 4) | RJ 4 |
+| D-27 | **Python 3.14** (3.14.8 en local, image `python:3.14.8-slim-trixie`) ; PostgreSQL 18 (`postgres:18.6-trixie`). Compatibilité des dépendances vérifiée au Jour 4 (`uv sync`, tests) | Retenu (choix de l'utilisateur, Jour 4, 2026-10-13) | RJ 4 |
 | D-28 | **Statut de compte porté par l'organisation** (`organizations`, niveau 3), pour que l'acteur puisse être construit sans import montant. Valeurs :<br>- organisations acheteuses : statuts du CdC §10 (Pending, Active, Suspended, Blocked) ;<br>- organisations exportatrices : à définir (Q-12). Le CdC §36 prévoit Approve, Reject, Suspend et Reactivate, et un rejet n'a pas d'état cible dans la liste acheteur.<br><br>`buyers` et `exporters` orchestrent les décisions en appelant `organizations`. L'utilisateur (`auth`) porte ses propres états (email vérifié, compte désactivé). | Proposé (emplacement). Jour 3 : statuts exportateur **PROPOSED** (Q-12), portés par chaque capacité de l'organisation ([data-model.md](data-model.md) §5.4) ; conflits CF-01 et CF-02 ([registre](../decisions/architecture-decisions.md)) | C1, Q-11, Q-12, Q-13 |
 | D-29 | Écritures de sécurité qui doivent survivre à un refus : enregistrées pendant la requête, exécutées après l'annulation de la transaction principale dans une transaction distincte, fournies par le module propriétaire (`auth`, `audit`) | Proposé | C2, revue finale |
 | D-30 | Codes stables pour catégories et référentiels ; métadonnées des catégories dans `products` ; tables techniques (compteurs tant que D-16 est maintenue, outbox) dans le socle | Proposé | C13, C14 |
