@@ -128,7 +128,7 @@ Aucun fichier vide n'est créé pour un module futur (RJ section 2).
 
 | ID | Convention | Statut |
 |---|---|---|
-| D-11 | Configuration lue depuis les variables d'environnement et validée au démarrage par un objet typé (Pydantic v2 ; `pydantic-settings` à justifier au Jour 4). Une configuration invalide empêche le démarrage. | Proposé |
+| D-11 | Configuration lue depuis les variables d'environnement et validée au démarrage par un objet typé (Pydantic v2 ; `pydantic-settings` à justifier au Jour 5 : le Jour 4 n'a aucune configuration applicative). Une configuration invalide empêche le démarrage. | Proposé |
 | D-11 | Environnements : `local`, `test`, `staging` (si l'hébergement en prévoit un, Q-79), `production`, `demo` (section 8.2). | Proposé |
 | D-11 | En `production`, le démarrage est refusé si : mode debug actif, secret par défaut ou trop court, `DEMO_MODE` actif, origines CORS `*`, adaptateurs de démonstration chargés. | Proposé |
 | D-11 | `.env` uniquement en local, jamais versionné. Toute variable est documentée dans `.env.example` avec une valeur factice (Jour 4). | Retenu (RJ section 1) |
@@ -154,7 +154,7 @@ Aucun fichier vide n'est créé pour un module futur (RJ section 2).
 ### 7.3 Identifiants
 
 - Clés techniques UUID, jamais d'entier séquentiel exposé (RJ section 1).
-- D-15, `À VALIDER` : **UUIDv7**, ordonné dans le temps et plus favorable aux index. Deux options :
+- D-15, Proposé au Jour 4 (voir le paragraphe « Jour 4 » ci-dessous) : **UUIDv7**, ordonné dans le temps et plus favorable aux index. Deux options :
   - généré par l'application, avec `uuid.uuid7()`, natif à partir de Python 3.14 (vérifié le 2026-10-12 : présent en 3.14.8, absent en 3.12.14) ;
   - généré par PostgreSQL 18 (`uuidv7()`).
   Choix au Jour 4 avec D-27 et la version de PostgreSQL. Sinon, UUIDv4.
@@ -329,6 +329,7 @@ Le CdC §77 (point 2) demande une recommandation de stack. La roadmap l'impose (
 | Alembic | Retenu | Migrations versionnées, relues, réversibles |
 | Pytest | Retenu | Fixtures adaptées aux bases de test isolées et aux tests paramétrés (machines d'état) |
 | Ruff | Retenu | Lint et formatage rapides, un seul outil |
+| mypy | Retenu (Jour 4) | Vérification de types en mode strict, avec le greffon Pydantic ; SQLAlchemy 2 est typé nativement |
 | Docker Compose | Retenu | Environnement reproductible (backend et PostgreSQL), aligné avec la CI |
-| uv | Proposé (Jour 4) | Verrouillage reproductible des dépendances ; gestion des versions de Python (3.12 et 3.14 déjà disponibles sur le poste) |
+| uv | Retenu (Jour 4, version 0.13.0 imposée par `required-version`) | Verrouillage reproductible des dépendances (`uv.lock`) ; gestion des versions de Python |
 | Redis, Celery | Non retenus au départ (D-20) | À introduire seulement si un besoin est démontré (Jour 31, limites de débit partagées au Jour 8) |

@@ -26,6 +26,8 @@ dev = [
 [tool.uv]
 # Application, pas bibliothèque : uv installe les dépendances sans empaqueter le projet.
 package = false
+# Même version d'uv en local, en CI et dans l'image Docker.
+required-version = "==0.13.0"
 
 [tool.ruff]
 target-version = "py314"
@@ -66,6 +68,7 @@ files = ["app", "tests", "alembic/env.py"]
 minversion = "9.0"
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = ["-ra", "--strict-markers", "--strict-config"]
+# importlib : deux fichiers de test de même nom dans des dossiers différents ne se gênent pas.
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
 xfail_strict = true
 filterwarnings = ["error"]

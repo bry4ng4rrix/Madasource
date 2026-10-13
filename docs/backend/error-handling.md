@@ -137,7 +137,7 @@ Règles :
 | Toute autre exception | 500 `INTERNAL_ERROR`, journalisée avec sa trace, jamais renvoyée au client |
 
 Remarques :
-- La lecture du code SQLSTATE dépend du pilote retenu (asyncpg ou psycopg 3, D-10). Elle est isolée dans le socle.
+- La lecture du code SQLSTATE dépend du pilote retenu (asyncpg, retenu au Jour 4, D-10). Elle est isolée dans le socle.
 - **Réponses 500** : une exception non gérée remonte jusqu'au middleware d'erreur serveur de Starlette, en dehors des autres middlewares. Les en-têtes ajoutés par ceux-ci (`X-Request-ID`, CORS) manqueraient donc, et un frontend d'une autre origine ne pourrait pas lire la réponse. Correctif proposé (C31, revue finale) :
   - un middleware ASGI pur, placé à l'extérieur, place l'identifiant de requête dans l'état de la requête (`scope["state"]`) plutôt que dans une variable de contexte, qui pourrait être réinitialisée en sortie de middleware ;
   - le gestionnaire 500 relit cet identifiant pour poser l'en-tête et le membre `request_id` ;

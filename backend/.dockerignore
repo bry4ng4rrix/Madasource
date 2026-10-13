@@ -1,12 +1,14 @@
 # Contexte de build du backend : seul le nécessaire entre dans l'image.
-.env
-.env.*
+# Les motifs `**/` s'appliquent aussi aux sous-dossiers (Docker, contrairement à Git,
+# n'applique un motif simple qu'à la racine du contexte).
+**/.env
+**/.env.*
 .venv/
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
 .coverage
 htmlcov/
 tests/
