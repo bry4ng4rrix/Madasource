@@ -1,0 +1,702 @@
+%% ERD MadaSource : backend V1 (Jour 3, 2026-10-13).
+%% Statut : proposition, non approuvée. Source détaillée : data-model.md.
+%% La section trades est PROVISOIRE : elle attend la validation de Q-82.
+%%
+%% Lecture :
+%% - Seules les colonnes structurantes sont montrées : clés, références, statuts, montants.
+%% - Le commentaire d'une colonne FK donne la table cible ("-> table").
+%% - Les colonnes d'acteur (created_by_user_id, decided_by_user_id...) sont omises ;
+%%   elles sont toutes des FK vers users (voir data-model.md).
+%% - Les références polymorphes (context_type/context_id, object_type/object_id)
+%%   n'ont pas de clé étrangère et n'apparaissent pas comme relations.
+%% - Chaque bloc commence par "%% module: <nom> (<niveau>)". Une FK ne pointe jamais
+%%   vers un module de niveau supérieur (D-07).
+%% - Tables conditionnelles : outbox_messages (D-20), exchange_rates (Q-65),
+%%   sample_requests (Q-53), favorites (Q-63).
+
+erDiagram
+
+    %% module: socle (0)
+    outbox_messages {
+        uuid id PK
+        varchar channel
+        varchar template_code
+        bytea recipient_encrypted "PERSONNEL"
+        bytea payload_encrypted "SECRET"
+        varchar status
+    }
+
+    %% module: audit (1)
+    audit_logs {
+        uuid id PK
+        timestamptz occurred_at
+        varchar category
+        varchar actor_kind
+        uuid actor_user_id "sans FK"
+        uuid acting_organization_id "sans FK"
+        uuid on_behalf_of_organization_id "sans FK"
+        varchar action
+        varchar object_type
+        uuid object_id
+        varchar result
+        varchar restricted_set
+    }
+
+    %% module: auth (2)
+    users {
+        uuid id PK
+        varchar email UK "PERSONNEL"
+        text password_hash "SECRET"
+        varchar status
+        timestamptz email_verified_at
+        timestamptz anonymized_at
+    }
+    sessions {
+        uuid id PK
+        uuid user_id FK "-> users"
+        timestamptz expires_at
+        timestamptz revoked_at
+    }
+    refresh_tokens {
+        uuid id PK
+        uuid session_id FK "-> sessions"
+        char token_hash UK "SECRET"
+        uuid replaced_by_id FK "-> refresh_tokens"
+        timestamptz consumed_at
+    }
+    email_verification_tokens {
+        uuid id PK
+        uuid user_id FK "-> users"
+        char token_hash UK "SECRET"
+        timestamptz used_at
+    }
+    password_reset_tokens {
+        uuid id PK
+        uuid user_id FK "-> users"
+        char token_hash UK "SECRET"
+        timestamptz used_at
+    }
+    users ||--o{ sessions : "ouvre"
+    sessions ||--o{ refresh_tokens : "émet"
+    refresh_tokens |o--o| refresh_tokens : "remplacé par"
+    users ||--o{ email_verification_tokens : "reçoit"
+    users ||--o{ password_reset_tokens : "reçoit"
+
+    %% module: organizations (3)
+    organizations {
+        uuid id PK
+        varchar legal_name
+        char country_code
+    }
+    organization_capabilities {
+        uuid id PK
+        uuid organization_id FK "-> organizations"
+        varchar capability "BUYER ou EXPORTER"
+        varchar account_status
+    }
+    organization_memberships {
+        uuid id PK
+        uuid organization_id FK "-> organizations"
+        uuid user_id FK "-> users"
+        varchar role "OWNER ou MEMBER"
+        varchar status
+    }
+    organization_invitations {
+        uuid id PK
+        uuid organization_id FK "-> organizations"
+        varchar email "PERSONNEL"
+        char token_hash UK "SECRET"
+        varchar status
+        timestamptz expires_at
+    }
+    organizations ||--|{ organization_capabilities : "possède"
+    organizations ||--|{ organization_memberships : "compte"
+    users ||--o{ organization_memberships : "adhère"
+    organizations ||--o{ organization_invitations : "invite"
+
+    %% module: access_control (4)
+    roles {
+        uuid id PK
+        varchar code UK
+        varchar scope
+    }
+    permissions {
+        uuid id PK
+        varchar code UK
+        varchar required_capability
+        varchar permission_set
+    }
+    role_permissions {
+        uuid role_id PK, FK "-> roles"
+        uuid permission_id PK, FK "-> permissions"
+    }
+    platform_role_assignments {
+        uuid id PK
+        uuid user_id FK "-> users"
+        uuid role_id FK "-> roles"
+        timestamptz revoked_at
+    }
+    roles ||--o{ role_permissions : "accorde"
+    permissions ||--o{ role_permissions : "incluse dans"
+    users ||--o{ platform_role_assignments : "détient"
+    roles ||--o{ platform_role_assignments : "attribué"
+
+    %% module: notifications (5)
+    notifications {
+        uuid id PK
+        uuid recipient_user_id FK "-> users"
+        uuid organization_id FK "-> organizations"
+        varchar type_code
+        varchar object_type
+        uuid object_id
+        timestamptz read_at
+    }
+    users ||--o{ notifications : "reçoit"
+    organizations |o--o{ notifications : "contexte"
+
+    %% module: documents (6)
+    documents {
+        uuid id PK
+        varchar owner_kind
+        uuid owner_organization_id FK "-> organizations"
+        varchar category
+        varchar context_type
+        uuid context_id
+        uuid related_trade_id "sans FK"
+        varchar status
+    }
+    document_versions {
+        uuid id PK
+        uuid document_id FK "-> documents"
+        int version_no
+        varchar storage_key UK "SECRET"
+        char sha256
+        varchar visibility
+        varchar scan_status
+    }
+    organizations |o--o{ documents : "dépose"
+    documents ||--|{ document_versions : "versionné"
+
+    %% module: messages (7)
+    conversations {
+        uuid id PK
+        varchar context_type
+        uuid context_id
+    }
+    conversation_participants {
+        uuid id PK
+        uuid conversation_id FK "-> conversations"
+        uuid organization_id FK "-> organizations"
+        varchar side
+        timestamptz left_at
+    }
+    messages {
+        uuid id PK
+        uuid conversation_id FK "-> conversations"
+        uuid author_user_id FK "-> users"
+        uuid author_organization_id FK "-> organizations"
+        text body
+    }
+    message_attachments {
+        uuid message_id PK, FK "-> messages"
+        uuid document_id PK, FK "-> documents"
+    }
+    conversations ||--|{ conversation_participants : "réunit"
+    organizations |o--o{ conversation_participants : "participe"
+    conversations ||--o{ messages : "contient"
+    users ||--o{ messages : "écrit"
+    organizations |o--o{ messages : "signe"
+    messages ||--o{ message_attachments : "joint"
+    documents ||--o{ message_attachments : "joint à"
+
+    %% module: buyers (8)
+    buyer_profiles {
+        uuid organization_id PK, FK "-> organizations"
+        varchar business_type
+        varchar contact_email "PERSONNEL"
+    }
+    organizations ||--o| buyer_profiles : "profil acheteur"
+
+    %% module: verification (8)
+    verification_records {
+        uuid id PK
+        uuid organization_id FK "-> organizations"
+        smallint level
+        varchar status
+        timestamptz expires_at
+        text internal_notes "INTERNAL_ONLY"
+        uuid supersedes_record_id FK "-> verification_records"
+    }
+    verification_reviewed_documents {
+        uuid verification_record_id PK, FK "-> verification_records"
+        uuid document_id PK, FK "-> documents"
+    }
+    organizations ||--o{ verification_records : "vérifiée par"
+    verification_records |o--o| verification_records : "remplace"
+    verification_records ||--o{ verification_reviewed_documents : "examine"
+    documents ||--o{ verification_reviewed_documents : "examiné"
+
+    %% module: exporters (9)
+    exporter_public_slugs {
+        varchar slug PK
+        uuid organization_id FK "-> organizations"
+        timestamptz retired_at
+    }
+    exporter_profiles {
+        uuid organization_id PK, FK "-> organizations"
+        varchar public_slug UK, FK "-> exporter_public_slugs"
+        uuid logo_document_id FK "-> documents"
+        bytea tax_identifier_encrypted "SENSIBLE"
+    }
+    capacity_records {
+        uuid id PK
+        uuid organization_id FK "-> exporter_profiles"
+        varchar category_code "code, sans FK"
+        numeric quantity
+        varchar unit
+    }
+    exporter_certifications {
+        uuid id PK
+        uuid organization_id FK "-> exporter_profiles"
+        varchar certification_code
+        uuid proof_document_id FK "-> documents"
+        date valid_until
+    }
+    bank_details {
+        uuid id PK
+        uuid organization_id FK "-> exporter_profiles"
+        bytea account_number_encrypted "BANCAIRE"
+        varchar masked_display
+        char currency
+        varchar status
+    }
+    organizations ||--o| exporter_profiles : "profil exportateur"
+    organizations ||--o{ exporter_public_slugs : "réserve"
+    exporter_public_slugs ||--o| exporter_profiles : "slug courant"
+    documents |o--o{ exporter_profiles : "logo"
+    exporter_profiles ||--o{ capacity_records : "déclare"
+    exporter_profiles ||--o{ exporter_certifications : "détient"
+    documents |o--o{ exporter_certifications : "preuve"
+    exporter_profiles ||--o{ bank_details : "coordonnées"
+
+    %% module: products (10)
+    category_definitions {
+        varchar code PK "VANILLA, CLOVES, COCOA"
+        jsonb labels
+    }
+    category_attributes {
+        uuid id PK
+        varchar category_code FK "-> category_definitions"
+        varchar code
+        varchar data_type
+        varchar status
+    }
+    products {
+        uuid id PK
+        uuid organization_id FK "-> organizations"
+        varchar category_code FK "-> category_definitions"
+        varchar name
+        numeric price_indication_amount
+        varchar status
+    }
+    product_attribute_values {
+        uuid product_id PK, FK "-> products (composite avec category_code)"
+        uuid attribute_id PK, FK "-> category_attributes (composite avec category_code)"
+        varchar category_code
+    }
+    category_definitions ||--o{ category_attributes : "définit"
+    category_definitions ||--o{ products : "classe"
+    organizations ||--o{ products : "publie"
+    products ||--o{ product_attribute_values : "caractérisé"
+    category_attributes ||--o{ product_attribute_values : "valeur"
+
+    %% module: rfqs (11)
+    rfqs {
+        uuid id PK
+        varchar reference UK "RFQ-AAAA-XXXXXX"
+        uuid buyer_organization_id FK "-> organizations"
+        varchar status
+        varchar distribution_mode
+        char destination_country_code
+        numeric target_price_amount
+    }
+    rfq_items {
+        uuid id PK
+        uuid rfq_id FK "-> rfqs"
+        smallint line_no
+        varchar category_code FK "-> category_definitions"
+        uuid product_id FK "-> products"
+        numeric quantity
+        varchar unit
+    }
+    rfq_recipients {
+        uuid id PK
+        uuid rfq_id FK "-> rfqs (composite avec buyer_organization_id)"
+        uuid buyer_organization_id
+        uuid exporter_organization_id FK "-> organizations"
+        varchar source
+        varchar status
+    }
+    rfq_questions {
+        uuid id PK
+        uuid rfq_id FK "-> rfqs"
+        uuid recipient_id FK "-> rfq_recipients"
+        text question
+        varchar visibility
+    }
+    organizations ||--o{ rfqs : "demande"
+    rfqs ||--|{ rfq_items : "ligne"
+    category_definitions ||--o{ rfq_items : "catégorie"
+    products |o--o{ rfq_items : "produit visé"
+    rfqs ||--o{ rfq_recipients : "diffusée à"
+    organizations ||--o{ rfq_recipients : "destinataire"
+    rfqs ||--o{ rfq_questions : "questions"
+    rfq_recipients ||--o{ rfq_questions : "paire"
+
+    %% module: quotations (12)
+    pricing_rule_versions {
+        uuid id PK
+        int version_no UK
+        varchar commercial_model
+        varchar method
+        numeric value
+        varchar category_code FK "-> category_definitions"
+        uuid exporter_organization_id FK "-> organizations"
+        varchar status
+    }
+    external_costs {
+        uuid id PK
+        varchar cost_type
+        numeric amount
+        char currency
+        timestamptz valid_until
+    }
+    quotations {
+        uuid id PK
+        varchar reference UK "MSQ-AAAA-XXXXXX"
+        uuid rfq_id FK "-> rfqs (composite avec buyer_organization_id)"
+        uuid recipient_id FK "-> rfq_recipients (composite avec rfq_id, exporter_organization_id)"
+        uuid buyer_organization_id
+        uuid exporter_organization_id
+        varchar status
+        int current_version_no
+    }
+    quotation_versions {
+        uuid id PK
+        uuid quotation_id FK "-> quotations"
+        int version_no
+        timestamptz expires_at
+        varchar commercial_model
+        uuid pricing_rule_version_id FK "-> pricing_rule_versions"
+        char currency
+        numeric supplier_total_amount "PRIX NET"
+        numeric buyer_total_amount
+    }
+    quotation_version_financials {
+        uuid quotation_version_id PK, FK "-> quotation_versions"
+        numeric margin_total "FINANCE"
+        numeric commission_amount "FINANCE"
+    }
+    quotation_lines {
+        uuid id PK
+        uuid quotation_version_id FK "-> quotation_versions"
+        uuid rfq_item_id FK "-> rfq_items"
+        uuid product_id FK "-> products"
+        numeric quantity
+        numeric supplier_unit_price "PRIX NET"
+        numeric buyer_unit_price
+    }
+    quotation_version_costs {
+        uuid quotation_version_id PK, FK "-> quotation_versions"
+        uuid external_cost_id PK, FK "-> external_costs"
+        numeric applied_amount
+    }
+    exchange_rates {
+        uuid id PK
+        char base_currency
+        char quote_currency
+        numeric rate
+        timestamptz valid_from
+    }
+    category_definitions |o--o{ pricing_rule_versions : "portée"
+    organizations |o--o{ pricing_rule_versions : "portée"
+    rfqs ||--o{ quotations : "reçoit"
+    rfq_recipients ||--o| quotations : "répond"
+    quotations ||--|{ quotation_versions : "versionnée"
+    pricing_rule_versions |o--o{ quotation_versions : "appliquée"
+    quotation_versions ||--o| quotation_version_financials : "finances"
+    quotation_versions ||--|{ quotation_lines : "lignes"
+    rfq_items ||--o{ quotation_lines : "couverte par"
+    products |o--o{ quotation_lines : "produit"
+    quotation_versions ||--o{ quotation_version_costs : "coûts"
+    external_costs ||--o{ quotation_version_costs : "appliqué"
+
+    %% module: negotiations (13)
+    negotiations {
+        uuid id PK
+        uuid quotation_id UK, FK "-> quotations"
+        varchar status
+    }
+    negotiation_offers {
+        uuid id PK
+        uuid negotiation_id FK "-> negotiations"
+        int sequence_no
+        varchar author_side
+        uuid based_on_quotation_version_id FK "-> quotation_versions"
+        numeric buyer_total_amount
+        numeric supplier_total_amount "PRIX NET"
+        varchar comment_visibility
+        varchar status
+    }
+    negotiation_offer_lines {
+        uuid id PK
+        uuid offer_id FK "-> negotiation_offers"
+        uuid quotation_line_id FK "-> quotation_lines"
+        numeric buyer_unit_price
+        numeric supplier_unit_price "PRIX NET"
+    }
+    negotiation_offer_financials {
+        uuid offer_id PK, FK "-> negotiation_offers"
+        numeric margin_total "FINANCE"
+    }
+    offer_external_costs {
+        uuid offer_id PK, FK "-> negotiation_offers"
+        uuid external_cost_id PK, FK "-> external_costs"
+        numeric applied_amount
+    }
+    quotations ||--o| negotiations : "négociée"
+    negotiations ||--o{ negotiation_offers : "propositions"
+    quotation_versions ||--o{ negotiation_offers : "base"
+    negotiation_offers ||--o{ negotiation_offer_lines : "lignes"
+    quotation_lines ||--o{ negotiation_offer_lines : "ligne"
+    negotiation_offers ||--o| negotiation_offer_financials : "finances"
+    negotiation_offers ||--o{ offer_external_costs : "coûts"
+    external_costs ||--o{ offer_external_costs : "appliqué"
+
+    %% module: trades (14) PROVISOIRE (Q-82)
+    trades {
+        uuid id PK
+        varchar reference UK "MST-AAAA-XXXXXX"
+        uuid rfq_id FK "-> rfqs"
+        uuid quotation_id UK, FK "-> quotations (composite avec buyer et exporter)"
+        uuid buyer_organization_id
+        uuid exporter_organization_id
+        uuid accepted_quotation_version_id FK "-> quotation_versions"
+        uuid accepted_offer_id FK "-> negotiation_offers"
+        varchar commercial_model
+        varchar status
+        varchar payment_summary
+        varchar shipment_summary
+    }
+    trade_items {
+        uuid id PK
+        uuid trade_id FK "-> trades"
+        uuid rfq_item_id UK, FK "-> rfq_items"
+        uuid quotation_line_id FK "-> quotation_lines"
+        numeric quantity
+        varchar unit
+    }
+    trade_agreements {
+        uuid id PK
+        uuid trade_id FK "-> trades"
+        varchar kind "SALE, SUPPLY ou DIRECT"
+        varchar seller_kind
+        uuid seller_organization_id FK "-> organizations"
+        varchar purchaser_kind
+        uuid purchaser_organization_id FK "-> organizations"
+        char currency
+        numeric total_amount
+        timestamptz frozen_at
+    }
+    trade_agreement_lines {
+        uuid agreement_id PK, FK "-> trade_agreements"
+        uuid trade_item_id PK, FK "-> trade_items"
+        numeric unit_price
+        numeric line_total
+    }
+    trade_financials {
+        uuid trade_id PK, FK "-> trades"
+        numeric margin_total "FINANCE"
+        numeric commission_amount "FINANCE"
+        timestamptz frozen_at
+    }
+    trade_events {
+        uuid id PK
+        uuid trade_id FK "-> trades"
+        timestamptz occurred_at
+        varchar actor_kind
+        varchar event_type
+        varchar visibility
+        uuid agreement_id FK "-> trade_agreements"
+        uuid document_id FK "-> documents"
+    }
+    rfqs ||--o{ trades : "aboutit à"
+    quotations ||--o| trades : "acceptée en"
+    quotation_versions ||--o{ trades : "version acceptée"
+    negotiation_offers |o--o| trades : "offre acceptée"
+    trades ||--|{ trade_items : "lignes"
+    rfq_items ||--o| trade_items : "attribuée"
+    quotation_lines ||--o{ trade_items : "origine"
+    trades ||--|{ trade_agreements : "conventions"
+    organizations |o--o{ trade_agreements : "partie"
+    trade_agreements ||--|{ trade_agreement_lines : "prix"
+    trade_items ||--|{ trade_agreement_lines : "valorisée"
+    trades ||--o| trade_financials : "finances"
+    trades ||--|{ trade_events : "historique"
+    trade_agreements |o--o{ trade_events : "relation"
+    documents |o--o{ trade_events : "pièce"
+
+    %% module: payment_records (15)
+    receiving_accounts {
+        uuid id PK
+        varchar label
+        bytea account_number_encrypted "BANCAIRE"
+        varchar masked_display
+        char currency
+        varchar status
+    }
+    payment_records {
+        uuid id PK
+        uuid trade_id FK "-> trades"
+        uuid agreement_id FK "-> trade_agreements (composite avec agreement_kind)"
+        varchar agreement_kind
+        varchar direction
+        numeric amount
+        char currency
+        varchar status
+        uuid receiving_account_id FK "-> receiving_accounts"
+    }
+    trades ||--o{ payment_records : "paiements"
+    trade_agreements ||--o{ payment_records : "règle"
+    receiving_accounts |o--o{ payment_records : "crédité"
+
+    %% module: shipments (15)
+    shipments {
+        uuid id PK
+        uuid trade_id FK "-> trades"
+        varchar carrier
+        varchar tracking_number
+        varchar status
+    }
+    tracking_events {
+        uuid id PK
+        uuid shipment_id FK "-> shipments"
+        timestamptz occurred_at
+        varchar status
+        varchar visibility
+    }
+    trades ||--o{ shipments : "expédié par"
+    shipments ||--o{ tracking_events : "suivi"
+
+    %% module: samples (15)
+    sample_requests {
+        uuid id PK
+        uuid buyer_organization_id FK "-> organizations"
+        uuid exporter_organization_id FK "-> organizations"
+        uuid product_id FK "-> products"
+        uuid rfq_id FK "-> rfqs"
+        varchar status
+    }
+    organizations ||--o{ sample_requests : "parties"
+    products |o--o{ sample_requests : "produit"
+    rfqs |o--o{ sample_requests : "RFQ"
+
+    %% module: exceptions (16)
+    exception_cases {
+        uuid id PK
+        varchar type
+        uuid trade_id FK "-> trades"
+        varchar object_type
+        uuid object_id
+        varchar priority
+        varchar status
+        uuid assigned_to_user_id FK "-> users"
+    }
+    exception_notes {
+        uuid id PK
+        uuid exception_id FK "-> exception_cases"
+        text body
+        varchar visibility
+    }
+    disputes {
+        uuid id PK
+        uuid trade_id FK "-> trades"
+        uuid opened_by_organization_id FK "-> organizations"
+        varchar reason_code
+        varchar status
+        boolean counterparty_visible
+    }
+    trades |o--o{ exception_cases : "exceptions"
+    users |o--o{ exception_cases : "assignée"
+    exception_cases ||--o{ exception_notes : "notes"
+    trades ||--o{ disputes : "litiges"
+    organizations ||--o{ disputes : "ouvre"
+
+    %% module: reviews (17)
+    reviews {
+        uuid id PK
+        uuid trade_id FK "-> trades (composite avec buyer et exporter)"
+        uuid buyer_organization_id
+        uuid exporter_organization_id
+        varchar direction
+        varchar status
+    }
+    review_ratings {
+        uuid review_id PK, FK "-> reviews"
+        varchar criterion PK
+        smallint score
+    }
+    trades ||--o{ reviews : "évalué"
+    reviews ||--|{ review_ratings : "notes"
+
+    %% module: matching (18)
+    matching_configs {
+        uuid id PK
+        int version_no UK
+        jsonb weights
+        jsonb thresholds
+        varchar status
+    }
+    match_runs {
+        uuid id PK
+        uuid rfq_id FK "-> rfqs"
+        uuid matching_config_id FK "-> matching_configs"
+        varchar trigger
+        varchar status
+        char input_digest
+    }
+    rfq_matches {
+        uuid id PK
+        uuid match_run_id FK "-> match_runs"
+        uuid rfq_id FK "-> rfqs"
+        uuid exporter_organization_id FK "-> organizations"
+        numeric score
+        jsonb criteria_results "INTERNE"
+        boolean is_selected
+    }
+    rfqs ||--o{ match_runs : "matching"
+    matching_configs ||--o{ match_runs : "configuration"
+    match_runs ||--o{ rfq_matches : "résultats"
+    rfqs ||--o{ rfq_matches : "candidats"
+    organizations ||--o{ rfq_matches : "candidat"
+
+    %% module: admin (20)
+    privacy_requests {
+        uuid id PK
+        varchar request_type
+        uuid subject_user_id FK "-> users"
+        varchar status
+        boolean legal_hold
+    }
+    users ||--o{ privacy_requests : "concerne"
+
+    %% module: favorites (13)
+    favorites {
+        uuid id PK
+        uuid user_id FK "-> users"
+        uuid organization_id FK "-> organizations"
+        varchar target_type
+        uuid target_id
+    }
+    users ||--o{ favorites : "enregistre"
+    organizations ||--o{ favorites : "contexte"
