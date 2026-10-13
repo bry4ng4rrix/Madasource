@@ -146,7 +146,7 @@ Pour chaque jour : tables créées (d'après le modèle de données), prérequis
 | 6 | `db` : convention de nommage, rôles PostgreSQL (indexes-and-constraints §1 et §6) | Jours 4 et 5 | D-10 (pilote), version de PostgreSQL |
 | 7 | Qualité, CI, test d'architecture (D-07) | Jours 4 à 6 | — |
 | 8 | Primitives de sécurité (hachage, jetons) | Jour 5 | — |
-| 9 | `users` (noyau), `organizations`, `organization_capabilities`, `organization_memberships`, `organization_invitations`, `roles`, `permissions`, `role_permissions`, `platform_role_assignments` | Jours 6 et 8 | Q-09, Q-10, Q-74 (PROPOSED, à approuver) ; Q-89 |
+| 9 | `users` (noyau), `organizations`, `organization_capabilities`, `organization_memberships`, `organization_invitations`, `roles`, `permissions`, `role_permissions`, `platform_role_assignments` | Jours 6 et 8 | Q-09, Q-10, Q-74 (PROPOSED, à approuver) ; Q-89, Q-98 |
 | 10 | `sessions`, `refresh_tokens` | Jour 9 | Q-14, Q-80 |
 | 11 | `email_verification_tokens`, `password_reset_tokens` ; `outbox_messages` si email réel | Jour 10 | Q-11, Q-12, Q-13, Q-52 |
 | 12 | `audit_logs` ; rétro-branchement des Jours 9 à 11 | Jour 6 | Q-69 |
@@ -164,7 +164,7 @@ Pour chaque jour : tables créées (d'après le modèle de données), prérequis
 | 24 | `pricing_rule_versions`, `external_costs`, `quotations`, `quotation_versions`, `quotation_version_financials`, `quotation_lines`, `quotation_version_costs` | Jours 19 à 21 | **Q-01** ; Q-02, Q-03, Q-04, Q-08, Q-34, Q-82, Q-91, Q-94 |
 | 25 | Validité et comparaison ; `exchange_rates` si Q-65 | Jour 24 | Q-34, Q-65, Q-91 |
 | 26 | `negotiations`, `negotiation_offers`, `negotiation_offer_lines`, `negotiation_offer_financials`, `offer_external_costs` | Jours 24 et 25 | **Q-05** ; Q-38, Q-39 |
-| 27 | `trades`, `trade_items`, `trade_agreements`, `trade_agreement_lines`, `trade_financials` | Jours 24 à 26 stables ; modèle commercial validé | **Q-82** ; Q-26, Q-95 |
+| 27 | `trades`, `trade_items`, `trade_agreements`, `trade_agreement_lines`, `trade_financials` | Jours 24 à 26 stables ; modèle commercial validé | **Q-82** ; Q-26, Q-95, Q-98 |
 | 28 | `trade_events` ; machine d'état | Jour 27 | **Q-41** ; Q-44, Q-46 |
 | 29 | `documents`, `document_versions` (complets) | Jour 9 (P-01) | Q-47, Q-48, Q-69, Q-83, Q-96 |
 | 30 | `conversations`, `conversation_participants`, `messages`, `message_attachments` | Jour 29 | Q-50, Q-84 |

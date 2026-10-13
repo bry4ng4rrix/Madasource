@@ -183,7 +183,7 @@ Les libellés affichés (en anglais ou en français) sont produits par le fronte
 | `Retry-After` | Avec 429 et 503 | Proposé |
 | `X-MadaSource-Mode: demo` | Réponse d'une instance DEMO. En complément, les références lisibles y portent un préfixe DEMO, visible dans le corps (D-18, S-57). | Proposé |
 | `Accept-Language` | Non exploité en V1 (D-19) | Proposé |
-| `X-Organization-Id` | Organisation active de la requête, pour un utilisateur membre de plusieurs organisations. L'adhésion active est vérifiée à chaque requête ; la valeur n'est jamais une preuve d'autorisation. Sans en-tête : organisation unique de l'utilisateur, sinon 400. Sans objet pour un admin de plateforme. | PROPOSED (Q-74), nom à valider |
+| `X-Organization-Id` | Organisation active de la requête, pour un utilisateur membre de plusieurs organisations. Règles proposées :<br>- l'adhésion active est vérifiée à chaque requête ; la valeur n'est jamais une preuve d'autorisation ;<br>- sans en-tête : organisation unique de l'utilisateur, sinon 400 ;<br>- même réponse pour une organisation inexistante et pour une organisation dont l'utilisateur n'est pas membre, et tentative auditée ;<br>- une requête faite dans le contexte d'une organisation ne porte jamais de permission de plateforme ;<br>- ignoré sur les routes publiques ; ajouté à `Access-Control-Allow-Headers` et à `Vary`. | PROPOSED (Q-74), nom à valider |
 
 ## 12. Codes de statut HTTP
 

@@ -258,7 +258,7 @@ Chaque cas d'usage verrouille selon D-09 : `FOR NO KEY UPDATE` avec `populate_ex
 1. Verrouiller dans l'ordre : RFQ, quotation, négociation, via leurs modules.
 2. Vérifier la version (S-43) et la validité (BR-QUO-05).
 3. `negotiations` marque la proposition acceptée.
-4. Créer le Trade avec ses deux jeux de termes (S-39). Le compteur `MST` est pris en dernier.
+4. Créer le Trade avec ses deux jeux de termes (S-39). Le compteur `MST` est pris en dernier (si Q-37 est approuvée : référence aléatoire, sans compteur). Modèle proposé au Jour 3 : conventions `SALE` et `SUPPLY` ([data-model.md](data-model.md) §5.16, provisoire).
 5. Écrire le TradeEvent, passer la RFQ en Accepted, notifier, écrire l'audit.
 6. Commit. Réponse 200 avec l'identifiant et la référence du Trade ; un rejeu renvoie la même réponse (D-09, D-33).
 

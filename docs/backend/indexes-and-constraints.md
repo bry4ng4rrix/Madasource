@@ -17,36 +17,52 @@ Convention passée à `MetaData(naming_convention=...)` de SQLAlchemy (Jour 6), 
 | Index | `ix_<table>_<colonnes>` | `ix_trade_events_trade_id_occurred_at` |
 | Index unique partiel | `uq_<table>_<nom>` | `uq_negotiation_offers_one_pending` |
 
-Les noms PostgreSQL sont limités à 63 caractères. Un nom plus long est raccourci explicitement dans la déclaration, jamais tronqué par la base. La traduction des violations d'intégrité ([error-handling.md](error-handling.md) §6) reconnaît une contrainte par son **nom** : un nom de contrainte ne change pas sans migration et sans mise à jour de cette correspondance.
+Points d'attention :
+- La convention de SQLAlchemy applique le modèle `ix` à tout objet `Index`, même unique. Les index uniques partiels (`uq_…`) sont donc **nommés explicitement** dans leur déclaration.
+- Les noms PostgreSQL sont limités à 63 caractères. Une clé étrangère composite dont le nom dépasserait cette limite est nommée explicitement, jamais tronquée par la base.
+- La traduction des violations d'intégrité ([error-handling.md](error-handling.md) §6) reconnaît une contrainte par son **nom** : un nom de contrainte ne change pas sans migration et sans mise à jour de cette correspondance.
 
 ## 2. Clés étrangères
 
 | Règle | Détail |
 |---|---|
 | `ON DELETE RESTRICT` partout | Aucune suppression en cascade. Une suppression physique qui laisserait un historique orphelin échoue. |
-| `ON UPDATE` | Sans objet : une clé primaire n'est jamais modifiée. |
+| `ON UPDATE` | Sans objet : une clé primaire n'est jamais modifiée. Les colonnes cibles d'une clé composite ne sont pas modifiables non plus (§6.2). |
 | Direction | Vers une table du même module, d'un module de niveau inférieur ou du socle (D-07). Vérifié sur l'ERD par un script de contrôle (Jour 3), puis par le test d'architecture (Jour 7). |
-| Index | Chaque colonne de clé étrangère est indexée, sauf si elle est la première colonne d'un autre index ou d'une contrainte d'unicité. PostgreSQL ne crée pas ces index automatiquement ; sans eux, `RESTRICT` et les jointures parcourent la table enfant. |
+| Index | Chaque colonne de clé étrangère est indexée, sauf si elle est la première colonne d'un autre index ou d'une contrainte d'unicité. PostgreSQL ne crée pas ces index automatiquement ; sans eux, `RESTRICT` et les jointures parcourent la table enfant. **Exception** : les colonnes d'acteur (`created_by_user_id`, `decided_by_user_id`…) ne sont pas indexées par défaut. Un utilisateur n'est jamais supprimé, donc `RESTRICT` ne les parcourt jamais ; un index n'est ajouté que pour une requête réelle (par exemple `assigned_to_user_id`). |
 | Références polymorphes | `context_type`/`context_id` et `object_type`/`object_id` n'ont pas de clé étrangère. L'existence de l'objet est vérifiée par le module propriétaire (P-01) au moment de l'écriture. Index composite (`context_type`, `context_id`). |
 | Identifiants d'acteur dans l'audit | `audit_logs.actor_user_id` n'a pas de clé étrangère : l'audit reste lisible et immuable même si le compte est anonymisé (Q-68). |
+| Colonnes facultatives | Une clé composite dont une colonne est nulle n'est pas vérifiée (`MATCH SIMPLE`, comportement par défaut). Un `CHECK` impose que les colonnes d'une même clé facultative soient toutes nulles ou toutes renseignées. |
 
-### 2.1 Clés étrangères composites (cohérence entre parties)
+### 2.1 Clés étrangères composites (cohérence entre objets)
 
-Elles garantissent qu'une organisation dénormalisée sur une ligne est bien celle de l'objet parent. Le `CHECK` de la même ligne garantit ensuite que l'acheteur et l'exportateur sont différents (S-36, Q-09).
+Elles garantissent qu'une valeur dénormalisée sur une ligne est bien celle de l'objet parent. Le `CHECK` de la même ligne garantit ensuite, par exemple, que l'acheteur et l'exportateur sont différents (S-36, Q-09).
 
 | Table enfant | Colonnes | Table cible (unicité requise) | Effet |
 |---|---|---|---|
 | `rfq_recipients` | (`rfq_id`, `buyer_organization_id`) | `rfqs` (`id`, `buyer_organization_id`) | Le destinataire connaît l'acheteur réel de la RFQ |
+| `rfq_questions` | (`recipient_id`, `rfq_id`) | `rfq_recipients` (`id`, `rfq_id`) | La question porte sur un destinataire de cette RFQ |
 | `quotations` | (`rfq_id`, `buyer_organization_id`) | `rfqs` (`id`, `buyer_organization_id`) | |
 | `quotations` | (`recipient_id`, `rfq_id`, `exporter_organization_id`) | `rfq_recipients` (`id`, `rfq_id`, `exporter_organization_id`) | La quotation vient d'un destinataire de **cette** RFQ |
-| `trades` | (`quotation_id`, `buyer_organization_id`, `exporter_organization_id`) | `quotations` (`id`, `buyer_organization_id`, `exporter_organization_id`) | Les parties du Trade sont celles de la quotation |
+| `trades` | (`quotation_id`, `rfq_id`, `buyer_organization_id`, `exporter_organization_id`) | `quotations` (`id`, `rfq_id`, `buyer_organization_id`, `exporter_organization_id`) | La RFQ et les parties du Trade sont celles de la quotation |
+| `trades` | (`accepted_quotation_version_id`, `quotation_id`) | `quotation_versions` (`id`, `quotation_id`) | La version acceptée appartient à la quotation (S-43) |
+| `trade_items` | (`quotation_line_id`, `rfq_item_id`) | `quotation_lines` (`id`, `rfq_item_id`) | La ligne de Trade reprend la ligne de RFQ de sa ligne de quotation |
+| `trade_agreements` | (`trade_id`, `commercial_model`) | `trades` (`id`, `commercial_model`) | Le type de convention est cohérent avec le modèle commercial (`CHECK` en §3.2) |
+| `trade_agreement_lines` | (`agreement_id`, `trade_id`) et (`trade_item_id`, `trade_id`) | `trade_agreements` (`id`, `trade_id`), `trade_items` (`id`, `trade_id`) | La convention et la ligne appartiennent au même Trade |
+| `trade_events` | (`agreement_id`, `trade_id`, `agreement_kind`) | `trade_agreements` (`id`, `trade_id`, `kind`) | Facultative ; la visibilité est bornée par le type (§3.2) |
+| `payment_records` | (`agreement_id`, `trade_id`, `agreement_kind`) | `trade_agreements` (`id`, `trade_id`, `kind`) | Le paiement porte sur une convention de **son** Trade ; le sens est cohérent avec le type (§3.2) |
+| `disputes` | (`agreement_id`, `trade_id`) | `trade_agreements` (`id`, `trade_id`) | Facultative |
 | `reviews` | (`trade_id`, `buyer_organization_id`, `exporter_organization_id`) | `trades` (`id`, `buyer_organization_id`, `exporter_organization_id`) | L'évaluation porte sur les parties du Trade |
+| `rfq_matches` | (`match_run_id`, `rfq_id`) | `match_runs` (`id`, `rfq_id`) | Le résultat porte sur la RFQ de l'exécution |
 | `product_attribute_values` | (`product_id`, `category_code`) et (`attribute_id`, `category_code`) | `products` (`id`, `category_code`), `category_attributes` (`id`, `category_code`) | L'attribut appartient à la catégorie du produit |
-| `payment_records` | (`agreement_id`, `agreement_kind`) | `trade_agreements` (`id`, `kind`) | Le sens du paiement est cohérent avec la convention (`CHECK` en §3) |
+| `document_versions` | (`document_id`, `document_category`) | `documents` (`id`, `category`) | Permet de borner la visibilité `PUBLIC` aux médias (§3.2) |
+| `exporter_profiles` | (`public_slug`, `organization_id`) ; (`logo_document_id`, `organization_id`) | `exporter_public_slugs` (`slug`, `organization_id`) ; `documents` (`id`, `owner_organization_id`) | Le slug et le logo appartiennent à l'organisation |
+| `exporter_certifications` | (`proof_document_id`, `organization_id`) | `documents` (`id`, `owner_organization_id`) | La preuve est un document de l'organisation |
+| `role_permissions` | (`role_id`, `scope`) et (`permission_id`, `scope`) | `roles` (`id`, `scope`), `permissions` (`id`, `scope`) | Une permission de plateforme n'est jamais liée à un rôle d'organisation (S-12) |
 
-Cohérence des lignes, **à arbitrer au Jour 24** : une ligne de quotation (`quotation_lines.rfq_item_id`) et une ligne de Trade (`trade_items.rfq_item_id`) doivent appartenir à la RFQ de leur parent. Deux options :
-- règle applicative, testée (proposition par défaut) ;
-- dénormalisation de `rfq_id` dans `quotation_versions`, `quotation_lines` et `trade_items`, avec des clés composites vers `rfq_items` (`id`, `rfq_id`). Plus sûr, mais trois clés composites de plus.
+Règles applicatives, testées, **à réexaminer au Jour 24** (option : dénormaliser `rfq_id` et ajouter des clés composites) :
+- `quotation_lines.rfq_item_id` appartient à la RFQ de la quotation ;
+- `negotiation_offers.based_on_quotation_version_id` et `trades.accepted_offer_id` appartiennent à la quotation concernée.
 
 ## 3. Contraintes `CHECK`
 
@@ -61,72 +77,90 @@ Cohérence des lignes, **à arbitrer au Jour 24** : une ligne de quotation (`quo
 | Codes et statuts | `col IN (...)` avec la liste de [data-model.md](data-model.md) §5 |
 | Montants | `>= 0` (prix, totaux, coûts) ; `> 0` (montant d'un Payment Record) |
 | Quantités | `> 0` |
-| Taux | `commission_rate BETWEEN 0 AND 100` ; `rate > 0` |
+| Taux | `commission_rate BETWEEN 0 AND 100` ; `rate > 0` ; règle de prix en pourcentage : `value <= 100` |
 | Score | `score BETWEEN 0 AND 100` (matching) ; `score BETWEEN 1 AND 5` (avis, Q-59) |
 | Textes exposés | `char_length(col) <= n`, avec `n` égal à la limite de validation de l'API |
 
-### 3.2 Groupes et dépendances entre colonnes
+### 3.2 Dépendances entre colonnes
 
 | Règle | Exemple |
 |---|---|
-| Tout ou rien | `num_nulls(price_indication_amount, price_indication_currency, price_indication_unit) IN (0, 3)` ; idem pour le MOQ, le prix cible, les quantités |
+| Tout ou rien | `num_nulls(price_indication_amount, price_indication_currency, price_indication_unit) IN (0, 3)` ; idem pour le MOQ, le prix cible, les quantités, les clés composites facultatives |
 | Intervalle | `target_delivery_from <= target_delivery_to` ; `valid_from < valid_to` |
 | Une seule valeur | `product_attribute_values` : `num_nonnulls(value_decimal, value_integer, value_text, value_boolean, value_enum_code) = 1` |
-| Champ obligatoire selon le statut | `verification_records` : `status = 'PENDING' OR (decided_at IS NOT NULL AND decided_by_user_id IS NOT NULL)` ; `payment_records` : `status <> 'CONFIRMED' OR (confirmed_at IS NOT NULL AND confirmed_by_user_id IS NOT NULL)` |
+| Règle de prix | `(method = 'FIXED_PER_UNIT') = (value_currency IS NOT NULL AND price_unit IS NOT NULL)` |
+| Champs obligatoires selon le statut | `verification_records` : `status = 'PENDING' OR (decided_at IS NOT NULL AND decided_by_user_id IS NOT NULL)`. `payment_records` : `CONFIRMED` ⇒ `confirmed_*` ; `FAILED` ⇒ `failed_*` ; `REFUNDED` ⇒ `refunded_*`. `bank_details`, `receiving_accounts` : `status IN ('PENDING_VERIFICATION', 'REJECTED') OR (verified_by_user_id IS NOT NULL AND verified_at IS NOT NULL AND effective_from IS NOT NULL)` |
 | Statut de compte par capacité | `organization_capabilities` : `(capability = 'BUYER' AND account_status IN ('PENDING', 'ACTIVE', 'SUSPENDED', 'BLOCKED')) OR (capability = 'EXPORTER' AND account_status IN ('PENDING_ACTIVATION', 'ACTIVE', 'SUSPENDED', 'CLOSED'))` (CF-02) |
 | Propriétaire d'un document | `(owner_kind = 'ORGANIZATION') = (owner_organization_id IS NOT NULL)` |
-| Parties d'une convention (provisoire) | `SALE` : vendeur `MADASOURCE`, acheteur `ORGANIZATION` ; `SUPPLY` : vendeur `ORGANIZATION`, acheteur `MADASOURCE` ; `DIRECT` : deux `ORGANIZATION` ; `(x_kind = 'ORGANIZATION') = (x_organization_id IS NOT NULL)` |
+| Visibilité publique | `document_versions` : `visibility <> 'PUBLIC' OR document_category = 'MARKETPLACE_MEDIA'` |
+| Participant MadaSource | `conversation_participants` : `(side = 'MADASOURCE') = (organization_id IS NULL)` |
+| Portée des permissions | `permissions` : `permission_set IS NULL OR scope = 'PLATFORM'` |
+| Type de convention (provisoire) | `(commercial_model = 'RESELLER' AND kind IN ('SALE', 'SUPPLY')) OR (commercial_model = 'INTERMEDIARY' AND kind = 'DIRECT')` |
+| Visibilité d'un événement (provisoire) | `agreement_kind IS DISTINCT FROM 'SALE' OR visibility IN ('BUYER_VISIBLE', 'INTERNAL_ONLY')`, et symétriquement pour `SUPPLY` (`EXPORTER_VISIBLE`) |
 | Sens d'un paiement (provisoire) | `(agreement_kind, direction) IN (('SALE', 'BUYER_TO_MADASOURCE'), ('SUPPLY', 'MADASOURCE_TO_EXPORTER'), ('DIRECT', 'BUYER_TO_EXPORTER'))` (S-40) |
+| Compte d'un paiement | `(receiving_account_id IS NOT NULL) = (direction = 'BUYER_TO_MADASOURCE')` ; `(beneficiary_bank_details_id IS NOT NULL) = (direction = 'MADASOURCE_TO_EXPORTER')` |
+| Retour après exception | `status_before_exception` : même liste que `status`, sauf `DISPUTED` et `ON_HOLD` |
 
 ### 3.3 Parties distinctes (S-36)
 
 `CHECK (buyer_organization_id <> exporter_organization_id)` sur `rfq_recipients`, `quotations`, `trades`, `reviews`, `sample_requests`. Avec les clés composites de §2.1, une organisation à double capacité (Q-09) ne peut jamais être les deux parties d'un même objet.
 
+Limite : ce contrôle porte sur les **organisations**. Un **utilisateur** membre des deux organisations (Q-74) est refusé par le service, pas par la base (Q-98).
+
 ### 3.4 Séparation des tâches
 
 | Table | Contrainte | Source |
 |---|---|---|
-| `payment_records` | `confirmed_by_user_id IS DISTINCT FROM recorded_by_user_id` et `confirmed_by_user_id IS DISTINCT FROM processing_by_user_id`, quand `confirmed_by_user_id` est renseigné ; même règle pour `refunded_by_user_id` | S-34 (double validation : Q-88) |
-| `bank_details`, `receiving_accounts` | `verified_by_user_id IS DISTINCT FROM created_by_user_id`, quand `verified_by_user_id` est renseigné | S-44 |
+| `payment_records` | `confirmed_by_user_id IS NULL OR (confirmed_by_user_id IS DISTINCT FROM recorded_by_user_id AND confirmed_by_user_id IS DISTINCT FROM processing_by_user_id)` ; `refunded_by_user_id IS NULL OR refunded_by_user_id IS DISTINCT FROM recorded_by_user_id` ; remboursement par un autre que le confirmateur : proposé | S-34 ; Q-56, Q-88 |
+| `bank_details`, `receiving_accounts` | `verified_by_user_id IS NULL OR verified_by_user_id IS DISTINCT FROM created_by_user_id`, combiné au contrôle de statut de §3.2 (une ligne vérifiée a toujours un vérificateur) | S-44 |
+| `platform_role_assignments` | `granted_by_user_id IS DISTINCT FROM user_id` (pas d'auto-attribution) | S-08 |
 
-`IS DISTINCT FROM` est la forme correcte en présence de valeurs nulles ; elle est combinée à `confirmed_by_user_id IS NULL OR ...`.
+Ces contrôles ne valent que si les colonnes d'acteur ne peuvent pas être réécrites après coup : droits par colonne (§6.2) et, à évaluer au Jour 33, déclencheur d'écriture unique. Avec un seul administrateur humain, la séparation des tâches ne protège rien : point noté dans les risques du Jour 3.
 
 ### 3.5 Évolution des listes de statuts
 
-Une liste de valeurs change par migration :
-- **ajout** d'une valeur : remplacement de la contrainte `CHECK` dans une même migration, sans effet sur les données ;
-- **retrait** ou **renommage** : migration de données explicite d'abord, relue (skill `database-migrations`), jamais silencieuse. Les valeurs déjà présentes dans les historiques immuables (`trade_events.from_status`…) ne sont pas réécrites.
+L'autogénération d'Alembic **ne compare pas** les contraintes `CHECK` : modifier une liste de statuts dans le code ne produit aucune migration, et une vérification automatique d'Alembic resterait verte. Règles :
+- toute modification d'une liste de valeurs fait l'objet d'une **migration écrite à la main**, relue (skill `database-migrations`) ;
+- un test compare les listes de l'application aux contraintes présentes en base (`pg_constraint`) ;
+- **ajout** d'une valeur : remplacement de la contrainte dans une même migration ; sur les grosses tables (`audit_logs`, `trade_events`, `documents`), `ADD CONSTRAINT … NOT VALID`, puis `VALIDATE CONSTRAINT` ;
+- **retrait** ou **renommage** : migration de données explicite d'abord, jamais silencieuse. Les valeurs déjà présentes dans les historiques immuables (`trade_events.from_status`…) ne sont pas réécrites.
+
+L'échelle des montants (Q-08) doit être fixée avant la première migration monétaire : changer l'échelle d'une colonne `numeric` réécrit la table.
 
 ## 4. Unicité
 
-### 4.1 Contraintes d'unicité simples
+### 4.1 Contraintes d'unicité
 
 | Table | Colonnes | Raison |
 |---|---|---|
-| `users` | `lower(email)` (index unique sur expression) | Un compte par email, sans tenir compte de la casse |
+| `users` | `lower(email)` (index unique sur expression) | Un compte par email, sans tenir compte de la casse ; l'anonymisation écrit une valeur de remplacement unique |
 | `refresh_tokens`, `email_verification_tokens`, `password_reset_tokens`, `organization_invitations` | `token_hash` | Recherche du jeton |
 | `organization_capabilities` | (`organization_id`, `capability`) | Q-09 |
 | `organization_memberships` | (`organization_id`, `user_id`) | Q-74 |
-| `roles`, `permissions` | `code` | |
+| `roles`, `permissions` | `code` ; (`id`, `scope`) | Clé composite §2.1 |
+| `documents` | (`id`, `category`) ; (`id`, `owner_organization_id`) | Clés composites §2.1 |
 | `document_versions` | (`document_id`, `version_no`) ; `storage_key` | |
+| `conversations` | (`context_type`, `context_id`, `channel`) | Un fil par contexte et par canal (data-model §5.8) |
 | `conversation_participants` | (`conversation_id`, `organization_id`) | |
+| `exporter_public_slugs` | (`slug`, `organization_id`) | Clé composite §2.1 |
 | `exporter_profiles` | `public_slug` | S-54 |
 | `category_attributes` | (`category_code`, `code`) ; (`id`, `category_code`) | Clé composite §2.1 |
 | `products` | (`id`, `category_code`) | Clé composite §2.1 |
 | `rfqs`, `quotations`, `trades` | `reference` | Q-37 |
 | `rfqs` | (`id`, `buyer_organization_id`) | Clé composite §2.1 |
 | `rfq_items` | (`rfq_id`, `line_no`) | |
-| `rfq_recipients` | (`rfq_id`, `exporter_organization_id`) ; (`id`, `rfq_id`, `exporter_organization_id`) | Un envoi par exportateur ; clé composite |
-| `quotations` | (`rfq_id`, `exporter_organization_id`) ; (`id`, `buyer_organization_id`, `exporter_organization_id`) | Une quotation par exportateur et par RFQ (Q-94) ; clé composite |
-| `quotation_versions` | (`quotation_id`, `version_no`) | |
-| `quotation_lines` | (`quotation_version_id`, `line_no`) ; (`quotation_version_id`, `rfq_item_id`) | |
+| `rfq_recipients` | (`rfq_id`, `exporter_organization_id`) ; (`id`, `rfq_id`) ; (`id`, `rfq_id`, `exporter_organization_id`) | Un envoi par exportateur ; clés composites |
+| `quotations` | (`rfq_id`, `exporter_organization_id`) ; (`id`, `rfq_id`, `buyer_organization_id`, `exporter_organization_id`) | Une quotation par exportateur et par RFQ (Q-94) ; clé composite |
+| `quotation_versions` | (`quotation_id`, `version_no`) ; (`id`, `quotation_id`) | Clé composite |
+| `quotation_lines` | (`quotation_version_id`, `line_no`) ; (`quotation_version_id`, `rfq_item_id`) ; (`id`, `rfq_item_id`) | Clé composite |
 | `pricing_rule_versions`, `matching_configs` | `version_no` | |
-| `negotiations` | `quotation_id` | Une négociation par quotation |
+| `negotiations` | `quotation_id` | Une négociation par quotation ; à revoir si Q-39 permet une reprise |
 | `negotiation_offers` | (`negotiation_id`, `sequence_no`) | Ordre des propositions |
 | `negotiation_offer_lines` | (`offer_id`, `quotation_line_id`) | |
-| `trades` | `quotation_id` ; (`id`, `buyer_organization_id`, `exporter_organization_id`) | Un Trade par quotation (BR-TRD-03), idempotence de l'acceptation ; clé composite |
-| `trade_items` | `rfq_item_id` | Une ligne de RFQ attribuée une seule fois. **À revoir** si Q-26 autorise la répartition d'une même ligne entre exportateurs |
-| `trade_agreements` | (`trade_id`, `kind`) ; (`id`, `kind`) | Une convention de chaque type ; clé composite |
+| `trades` | `quotation_id` ; (`id`, `buyer_organization_id`, `exporter_organization_id`) ; (`id`, `commercial_model`) | Un Trade par quotation (BR-TRD-03), idempotence de l'acceptation ; clés composites |
+| `trade_items` | (`id`, `trade_id`) | Clé composite |
+| `trade_agreements` | (`trade_id`, `kind`) ; (`id`, `trade_id`) ; (`id`, `trade_id`, `kind`) | Une convention de chaque type ; clés composites |
+| `match_runs` | (`id`, `rfq_id`) | Clé composite |
 | `reviews` | (`trade_id`, `direction`) | BR-REP-02 |
 | `rfq_matches` | (`match_run_id`, `exporter_organization_id`) | |
 | `favorites` | (`user_id`, `organization_id`, `target_type`, `target_id`) | |
@@ -135,21 +169,21 @@ Une liste de valeurs change par migration :
 
 | Table | Index | Règle |
 |---|---|---|
-| `organization_invitations` | (`organization_id`, `lower(email)`) `WHERE status = 'PENDING'` | Une invitation en attente par email et par organisation (proposé) |
+| `organization_invitations` | (`organization_id`, `lower(email)`) `WHERE status = 'PENDING'` | Une invitation en attente par email et par organisation (proposé). Une invitation expirée reste `PENDING` (expiration calculée, D-23) : le service la révoque sous verrou avant d'en créer une nouvelle |
 | `platform_role_assignments` | (`user_id`, `role_id`) `WHERE revoked_at IS NULL` | Une attribution active |
-| `conversations` | (`context_type`, `context_id`) | Une conversation par contexte : paire RFQ–exportateur, convention de Trade… (proposé, S-31) |
 | `conversation_participants` | (`conversation_id`) `WHERE organization_id IS NULL` | Une seule ligne MadaSource par conversation |
 | `verification_records` | (`organization_id`) `WHERE status = 'PENDING'` | Une demande en cours à la fois |
-| `bank_details` | (`organization_id`, `currency`) `WHERE status = 'ACTIVE'` ; idem `WHERE status = 'PENDING_VERIFICATION'` | Un compte actif et une modification en attente par devise (S-44) |
-| `receiving_accounts` | (`currency`) `WHERE status = 'ACTIVE'` | |
+| `bank_details` | (`organization_id`, `currency`) `WHERE status = 'PENDING_VERIFICATION'` ; (`organization_id`, `currency`, `effective_from`) `WHERE status = 'VERIFIED'` | Une modification en attente par devise ; pas deux comptes vérifiés à la même date de prise d'effet. Le compte courant est calculé à la lecture (data-model §5.11) |
+| `receiving_accounts` | (`currency`) `WHERE status = 'PENDING_VERIFICATION'` ; (`currency`, `effective_from`) `WHERE status = 'VERIFIED'` | Idem |
 | `negotiation_offers` | (`negotiation_id`) `WHERE status = 'PENDING'` ; (`negotiation_id`) `WHERE status = 'ACCEPTED'` | Une proposition en attente ; une seule acceptation (BR-NEG-04) |
+| `trade_items` | (`rfq_item_id`) `WHERE released_at IS NULL` | Une ligne de RFQ attribuée à un seul Trade non annulé ; à revoir avec Q-26 |
 | `matching_configs` | `((true))` `WHERE status = 'ACTIVE'` | Une configuration active |
 | `pricing_rule_versions` | Aucun index simple ne suffit (chevauchement de périodes) | Non-chevauchement des règles actives d'une même portée : règle applicative ; contrainte `EXCLUDE` possible, mais elle exige l'extension `btree_gist`, à justifier au Jour 24 |
 | `disputes` | (`trade_id`, `opened_by_organization_id`) `WHERE status NOT IN ('RESOLVED', 'CLOSED')` | Un litige ouvert par partie et par Trade (proposé, Q-92) |
 
 ### 4.3 Références lisibles (Q-37)
 
-La référence est générée par l'application (suite aléatoire, générateur cryptographique). En cas de collision, `uq_<table>_reference` refuse l'insertion. Comme une violation de contrainte annule la transaction PostgreSQL entière, l'insertion est faite dans un **point de sauvegarde** (`begin_nested`). En cas de violation de **cette** contrainte, et d'elle seule, la transaction revient au point de sauvegarde et réessaie avec une nouvelle valeur (3 tentatives au plus). Toute autre violation remonte normalement.
+La référence est générée par l'application (suite aléatoire, générateur cryptographique). En cas de collision, `uq_<table>_reference` refuse l'insertion. Comme une violation de contrainte annule toute la transaction PostgreSQL, l'**instruction `INSERT` seule** est placée dans un point de sauvegarde (`begin_nested`). Un retour au point de sauvegarde libère les verrous pris après lui : aucun verrou n'est donc pris entre l'ouverture du point de sauvegarde et l'insertion. En cas de violation de **cette** contrainte, et d'elle seule, la transaction revient au point de sauvegarde et réessaie avec une nouvelle valeur (3 tentatives au plus). Toute autre violation remonte normalement.
 
 ## 5. Index de lecture
 
@@ -162,12 +196,12 @@ Index proposés pour les listes de la roadmap. Ils seront confirmés par `EXPLAI
 | `notifications` | (`recipient_user_id`, `created_at`, `id`) ; (`recipient_user_id`) `WHERE read_at IS NULL` | Flux par curseur ; compteur non lus |
 | `documents` | (`context_type`, `context_id`) ; (`owner_organization_id`) ; (`related_trade_id`) | Documents d'un objet, d'une organisation, d'un Trade |
 | `messages` | (`conversation_id`, `created_at`, `id`) | Flux par curseur |
+| `verification_records` | (`organization_id`, `requested_at` DESC) | Dernier enregistrement, lu par le matching et le marketplace |
 | `products` | (`category_code`, `published_at`) `WHERE status = 'PUBLISHED'` ; (`organization_id`, `status`) ; GIN (`certification_codes`) | Marketplace ; catalogue de l'exportateur ; filtre par certification |
 | `product_attribute_values` | (`attribute_id`, `value_enum_code`) ; (`attribute_id`, `value_decimal`) | Filtres d'attributs du marketplace |
 | `rfqs` | (`buyer_organization_id`, `status`, `created_at`) | Liste des RFQ de l'acheteur |
 | `rfq_recipients` | (`exporter_organization_id`, `status`, `sent_at`) | Inbox de l'exportateur (RJ 21) |
 | `quotations` | (`exporter_organization_id`, `status`) | Quotations de l'exportateur |
-| `quotation_versions` | (`expires_at`) | Quotations proches de l'expiration (calcul à la lecture, D-23) |
 | `trades` | (`buyer_organization_id`, `status`) ; (`exporter_organization_id`, `status`) ; (`status`, `created_at`) | Listes par partie ; vue admin |
 | `trade_events` | (`trade_id`, `occurred_at`) | Timeline |
 | `payment_records` | (`trade_id`) ; (`status`, `recorded_at`) `WHERE status IN ('PENDING', 'PROCESSING')` | Paiements d'un Trade ; file de confirmation admin |
@@ -176,6 +210,8 @@ Index proposés pour les listes de la roadmap. Ils seront confirmés par `EXPLAI
 | `rfq_matches` | (`rfq_id`, `score`) | Classement des candidats |
 | `outbox_messages` | (`status`, `next_attempt_at`) `WHERE status = 'PENDING'` | Envoi différé (conditionnel) |
 | Tables à curseur | (`created_at`, `id`) ou (`occurred_at`, `id`) | Pagination stable ([api-conventions.md](api-conventions.md#6-pagination-tri-et-filtres)) |
+
+Pas d'index sur `quotation_versions.expires_at` : il couvrirait toutes les versions historiques. La liste des quotations proches de l'expiration part de la version courante ; un index est ajouté seulement si `EXPLAIN` le justifie.
 
 ## 6. Immuabilité et droits
 
@@ -188,47 +224,75 @@ Index proposés pour les listes de la roadmap. Ils seront confirmés par `EXPLAI
 
 Les noms de rôles sont des propositions ; ils seront fixés au Jour 4 ou au Jour 6. Aucun rôle superutilisateur n'est utilisé par l'application.
 
-### 6.2 Tables immuables
+### 6.2 Droits de `madasource_app`
 
-| Table | `madasource_app` | Remarque |
+Les droits par colonne sont pris en charge par PostgreSQL (`GRANT UPDATE (col, ...)`). Une table verrouillée par `FOR NO KEY UPDATE` doit garder au moins une colonne modifiable : ce verrou exige le droit `UPDATE`.
+
+| Table | Droits | Remarque |
 |---|---|---|
-| `audit_logs` | `INSERT`, `SELECT` seulement | BR-AUD-02 ; aucun `UPDATE` ni `DELETE` (Jour 12) |
-| `trade_events`, `tracking_events`, `exception_notes`, `rfq_matches`, `quotation_versions`, `quotation_lines`, `quotation_version_costs`, `quotation_version_financials`, `external_costs`, `negotiation_offer_lines`, `negotiation_offer_financials`, `offer_external_costs`, `trade_agreement_lines`, `trade_financials` | `INSERT`, `SELECT` seulement | Historiques et termes figés (BR-NEG-02, BR-TRD-05, BR-TRD-07, S-43) |
-| `trade_agreements` | `INSERT`, `SELECT` | Termes figés ; une modification contractuelle future passera par une nouvelle convention (À VALIDER) |
-| `negotiation_offers` | `INSERT`, `SELECT`, `UPDATE` sur les colonnes `status`, `decided_at`, `decided_by_user_id` seulement | Droit `UPDATE` par colonne |
-| `document_versions` | `INSERT`, `SELECT`, `UPDATE` sur `visibility`, `visibility_changed_at`, `visibility_changed_by_user_id`, `scan_status` seulement | |
-| `refresh_tokens` | `INSERT`, `SELECT`, `UPDATE` sur `consumed_at`, `replaced_by_id` seulement | |
-| Toutes les autres tables | `SELECT`, `INSERT`, `UPDATE` ; `DELETE` seulement sur les tables d'association et les données temporaires (`role_permissions`, `message_attachments`, `favorites`, jetons expirés, `outbox_messages` envoyés) | Pas de suppression physique dans le workflow normal |
+| `audit_logs` | `INSERT`, `SELECT` | BR-AUD-02 ; aucun `UPDATE` ni `DELETE` (Jour 12) |
+| `trade_events`, `tracking_events`, `exception_notes`, `rfq_matches`, `quotation_versions`, `quotation_lines`, `quotation_version_costs`, `quotation_version_financials`, `external_costs`, `negotiation_offer_lines`, `negotiation_offer_financials`, `offer_external_costs`, `trade_agreement_lines`, `trade_financials` | `INSERT`, `SELECT` | Historiques et termes figés (BR-NEG-02, BR-TRD-05, BR-TRD-07, S-43) |
+| `trade_items` | `INSERT`, `SELECT`, `UPDATE (released_at)` | Termes figés ; libération d'une ligne de RFQ après annulation |
+| `trade_agreements` | `INSERT`, `SELECT`, `UPDATE (payment_status, updated_at)` | Termes figés ; une modification contractuelle future passera par une nouvelle convention (À VALIDER) |
+| `trades` | `INSERT`, `SELECT`, `UPDATE` sur les colonnes de cycle de vie seulement (`status`, `status_before_exception`, `shipment_summary`, `completed_at`, `cancelled_at`, `updated_at`) | Parties, quotation, version, modèle commercial et référence figés |
+| `negotiation_offers` | `INSERT`, `SELECT`, `UPDATE (status, decided_at, decided_by_user_id)` | |
+| `payment_records` | `INSERT`, `SELECT`, `UPDATE` sur `status` et les colonnes `processing_*`, `confirmed_*`, `failed_*`, `refunded_*`, `updated_at` | Convention, sens, montant, devise, comptes et saisie figés (S-34) |
+| `bank_details`, `receiving_accounts` | `INSERT`, `SELECT`, `UPDATE` sur `status`, `verified_*`, `rejected_*`, `effective_from`, `updated_at` | Les colonnes chiffrées ne se réécrivent jamais sur place : un changement crée une nouvelle ligne, soumise à S-44 |
+| `document_versions` | `INSERT`, `SELECT`, `UPDATE (visibility, visibility_changed_at, visibility_changed_by_user_id, scan_status)` | La visibilité d'un justificatif de paiement n'est pas modifiable (règle du service, data-model §5.17) |
+| `refresh_tokens` | `INSERT`, `SELECT`, `UPDATE (consumed_at, replaced_by_id)` | |
+| `messages` | `INSERT`, `SELECT` ; `UPDATE (body, edited_at)` seulement si Q-50 autorise la modification par l'auteur | |
+| Colonnes cibles d'une clé composite | Exclues de tout droit `UPDATE` (`rfqs.buyer_organization_id`, parties des quotations et des Trades, `trade_agreements.kind`, `documents.category`, `roles.scope`, `permissions.scope`…) | PostgreSQL les traite comme des colonnes de clé : leur modification prendrait un verrou `FOR UPDATE` qui bloque les insertions filles |
+| `DELETE` | Seulement sur : tables d'association (`role_permissions`, `message_attachments`, `favorites`) ; lignes d'un brouillon (`rfq_items` d'une RFQ `DRAFT`, `product_attribute_values` facultatives) ; données temporaires (jetons expirés, `outbox_messages` envoyés ou abandonnés) | Pas de suppression physique dans le workflow normal |
+| Toutes les autres tables | `SELECT`, `INSERT`, `UPDATE` | |
 
-Les droits par colonne sont pris en charge par PostgreSQL (`GRANT UPDATE (col, ...)`). Ils protègent contre une erreur de code, pas contre un administrateur de la base : ce n'est pas une preuve d'intégrité au sens juridique. Le chaînage du journal d'audit reste à évaluer (security-design §18).
+Ces droits protègent contre une erreur de code, pas contre un administrateur de la base : ce n'est pas une preuve d'intégrité au sens juridique. Le chaînage du journal d'audit reste à évaluer (security-design §18).
 
-Le droit à l'effacement (Q-68) s'applique par **anonymisation** de `users` et des profils, jamais par une modification des tables immuables, qui ne contiennent que des identifiants.
+### 6.3 Effacement et tables immuables
+
+Le droit à l'effacement (Q-68) s'applique d'abord par **anonymisation** de `users` et des profils. Mais plusieurs tables immuables contiennent du **texte libre** qui peut citer une personne :
+- `trade_events.comment`, `tracking_events.comment` et `location`, `exception_notes.body` ;
+- `negotiation_offers.comment`, `quotation_versions.additional_conditions` ;
+- `document_versions.original_filename`.
+
+Le rôle applicatif ne peut pas les modifier. Proposition, **À VALIDER avec un juriste (Q-68)** : une procédure d'effacement exceptionnelle, exécutée par un rôle dédié disposant d'un `UPDATE` limité à ces colonnes, déclenchée par une demande `privacy_requests` approuvée, et auditée (trace minimale, sans recopie du texte effacé).
 
 ## 7. Concurrence
 
-Rappel des règles du Jour 2 (D-09), appliquées au modèle :
+Règles du Jour 2 (D-09), appliquées au modèle. L'ordre suit les niveaux des modules : la ligne de plus bas niveau est verrouillée en premier.
 
-| Opération | Ligne verrouillée (`FOR NO KEY UPDATE`) | Contrainte de dernier rempart |
+| Opération | Lignes verrouillées (`FOR NO KEY UPDATE`), dans l'ordre | Contrainte de dernier rempart |
 |---|---|---|
+| Modification d'adhésion (rôle, retrait, statut) | `organizations` | Invariant « au moins un OWNER » vérifié sous verrou |
+| Révocation d'un rôle de plateforme | Ligne de l'administrateur concerné, puis relecture des administrateurs actifs | Au moins un administrateur actif (règle applicative) |
+| Changement de coordonnées bancaires | `exporter_profiles` | `uq_bank_details_one_pending` ; l'ancienne demande est close avant l'insertion de la nouvelle |
 | Envoi d'une RFQ aux exportateurs | `rfqs` | `uq_rfq_recipients_rfq_id_exporter_organization_id` |
-| Nouvelle version de quotation | `quotations` | `uq_quotation_versions_quotation_id_version_no` |
-| Contre-offre | `negotiations` | `uq_negotiation_offers_one_pending` |
-| Acceptation et création du Trade | `rfqs`, puis `quotations`, puis `negotiations` (ordre des niveaux) | `uq_trades_quotation_id`, `uq_trade_items_rfq_item_id`, `uq_negotiation_offers_one_accepted` |
+| Création d'une quotation ou d'une version | `rfqs`, puis `quotations` | `uq_quotations_rfq_id_exporter_organization_id`, `uq_quotation_versions_quotation_id_version_no` |
+| Contre-offre | `rfqs` (si son statut change), puis `negotiations` ; relecture des offres **après** le verrou (`populate_existing`) | `uq_negotiation_offers_one_pending` |
+| Acceptation et création du Trade | `rfqs`, puis `quotations`, puis `negotiations` | `uq_trades_quotation_id`, `uq_trade_items_rfq_item_active`, `uq_negotiation_offers_one_accepted` |
 | Transition du Trade | `trades` | — |
-| Confirmation d'un paiement | `trades`, puis `payment_records` | `ck_payment_records_confirmer_distinct` |
-| Changement de coordonnées bancaires | `exporter_profiles` | `uq_bank_details_one_pending`, `uq_bank_details_one_active` |
+| Paiement (saisie, confirmation, échec, remboursement) | `trades`, puis `payment_records` | `ck_payment_records_confirmer_distinct` |
+| Expédition, suivi, exception, litige qui modifient le Trade | `trades`, puis `shipments`, `exception_cases` ou `disputes` | — |
 
-Le verrou sur `rfqs` lors de l'acceptation sérialise les acceptations concurrentes de lignes d'une même RFQ (Q-25, Q-26).
+Règle générale : toute écriture du statut d'une RFQ (`QUOTATIONS_RECEIVED`, `NEGOTIATING`, `ACCEPTED`, `CLOSED`, Q-95) verrouille `rfqs` **en premier**. Sans cela, une contre-offre qui verrouillerait `negotiations` puis écrirait `rfqs` entrerait en interblocage avec une acceptation (`rfqs` → `quotations` → `negotiations`). Le verrou sur `rfqs` sérialise aussi les acceptations concurrentes de lignes d'une même RFQ (Q-25, Q-26).
+
+Compteurs : `failed_login_count` est incrémenté par une instruction atomique (`SET failed_login_count = failed_login_count + 1`), hors transaction principale (D-29).
 
 ## 8. Points à valider
 
 | Sujet | Référence |
 |---|---|
-| Précision `numeric(19,4)` et arrondis | Q-08 |
+| Précision `numeric(19,4)` et arrondis, avant la première migration monétaire | Q-08 |
 | Une quotation par exportateur et par RFQ | Q-94 |
-| Répartition d'une ligne de RFQ entre exportateurs | Q-26 |
-| Clés composites de cohérence des lignes | Jour 24 |
+| Répartition d'une ligne de RFQ entre exportateurs ; libération après annulation | Q-26 |
+| Reprise d'une négociation close | Q-39 |
+| Clés composites de cohérence des lignes et des offres | Jour 24 |
 | Contrainte `EXCLUDE` (extension `btree_gist`) | Jour 24 |
+| Déclencheur d'écriture unique sur les colonnes d'acteur des paiements | Jour 33 |
+| Devises différentes entre vente et approvisionnement (taux figé) | Q-65 |
+| Lignes affectées à chaque expédition (`shipment_items`) | Q-57 |
+| Statut des lignes de RFQ | Q-95 |
+| Procédure d'effacement des textes immuables | Q-68 |
+| Utilisateur membre des deux parties | Q-98 |
 | Noms des rôles PostgreSQL | Jours 4 et 6 |
 | Version de PostgreSQL | D-15 (Jour 4) ; ce document n'utilise rien au-delà de PostgreSQL 13 |
 | Toutes les contraintes du Trade | Q-82 |
