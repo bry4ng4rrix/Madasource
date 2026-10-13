@@ -86,9 +86,9 @@ stateDiagram-v2
 | Verified | Expired | Système, à l'expiration | CdC §8 | Déduit (Q-15) |
 | Verified | Suspended | Admin | CdC §36 | Déduit (Q-12) |
 | Suspended | Verified | Admin (« reactivate ») | CdC §36 | Déduit (Q-12) |
+| Rejected, Expired | nouvelle demande | Exportateur | — | Proposé (Q-15) |
 
 Le CdC §8 ne donne que la liste des statuts. Le CdC §36 liste des **actions de gestion de l'exportateur** (« Approve · Reject · Suspend · Reactivate »), qui peuvent porter sur le compte ou sur la vérification. Les transitions ci-dessus en sont déduites ; la distinction entre statut du compte et statut de vérification relève de Q-12.
-| Rejected, Expired | nouvelle demande | Exportateur | — | Proposé (Q-15) |
 
 Changement de niveau : proposition de créer un nouvel enregistrement, pour conserver l'historique de chaque décision (BR-VER-02). `À VALIDER` (Q-15).
 

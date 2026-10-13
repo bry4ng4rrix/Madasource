@@ -51,6 +51,7 @@ Elles garantissent qu'une valeur dénormalisée sur une ligne est bien celle de 
 | `trade_agreement_lines` | (`agreement_id`, `trade_id`) et (`trade_item_id`, `trade_id`) | `trade_agreements` (`id`, `trade_id`), `trade_items` (`id`, `trade_id`) | La convention et la ligne appartiennent au même Trade |
 | `trade_events` | (`agreement_id`, `trade_id`, `agreement_kind`) | `trade_agreements` (`id`, `trade_id`, `kind`) | Facultative ; la visibilité est bornée par le type (§3.2) |
 | `payment_records` | (`agreement_id`, `trade_id`, `agreement_kind`) | `trade_agreements` (`id`, `trade_id`, `kind`) | Le paiement porte sur une convention de **son** Trade ; le sens est cohérent avec le type (§3.2) |
+| `payment_records` | (`trade_id`, `exporter_organization_id`) ; (`beneficiary_bank_details_id`, `exporter_organization_id`) | `trades` (`id`, `exporter_organization_id`) ; `bank_details` (`id`, `organization_id`) | Le compte bénéficiaire appartient à l'exportateur du Trade (R-28) |
 | `disputes` | (`agreement_id`, `trade_id`) | `trade_agreements` (`id`, `trade_id`) | Facultative |
 | `reviews` | (`trade_id`, `buyer_organization_id`, `exporter_organization_id`) | `trades` (`id`, `buyer_organization_id`, `exporter_organization_id`) | L'évaluation porte sur les parties du Trade |
 | `rfq_matches` | (`match_run_id`, `rfq_id`) | `match_runs` (`id`, `rfq_id`) | Le résultat porte sur la RFQ de l'exécution |
@@ -59,10 +60,13 @@ Elles garantissent qu'une valeur dénormalisée sur une ligne est bien celle de 
 | `exporter_profiles` | (`public_slug`, `organization_id`) ; (`logo_document_id`, `organization_id`) | `exporter_public_slugs` (`slug`, `organization_id`) ; `documents` (`id`, `owner_organization_id`) | Le slug et le logo appartiennent à l'organisation |
 | `exporter_certifications` | (`proof_document_id`, `organization_id`) | `documents` (`id`, `owner_organization_id`) | La preuve est un document de l'organisation |
 | `role_permissions` | (`role_id`, `scope`) et (`permission_id`, `scope`) | `roles` (`id`, `scope`), `permissions` (`id`, `scope`) | Une permission de plateforme n'est jamais liée à un rôle d'organisation (S-12) |
+| `platform_role_assignments` | (`role_id`, `role_scope`) | `roles` (`id`, `scope`) | Seul un rôle de plateforme est attribué (`CHECK role_scope = 'PLATFORM'`) |
 
 Règles applicatives, testées, **à réexaminer au Jour 24** (option : dénormaliser `rfq_id` et ajouter des clés composites) :
 - `quotation_lines.rfq_item_id` appartient à la RFQ de la quotation ;
-- `negotiation_offers.based_on_quotation_version_id` et `trades.accepted_offer_id` appartiennent à la quotation concernée.
+- `negotiation_offers.based_on_quotation_version_id` et `trades.accepted_offer_id` appartiennent à la quotation concernée ;
+- `trade_items.quotation_line_id` appartient à la version acceptée ; `negotiation_offer_lines.quotation_line_id` appartient à la version de base de l'offre ;
+- le canal d'une conversation est cohérent avec ses participants et avec le type de convention (data-model §5.8, sous réserve de Q-99).
 
 ## 3. Contraintes `CHECK`
 
@@ -73,7 +77,7 @@ Règles applicatives, testées, **à réexaminer au Jour 24** (option : dénorma
 | Devise | `currency ~ '^[A-Z]{3}$'` ; liste des devises admises : application (Q-65) |
 | Pays | `~ '^[A-Z]{2}$'` |
 | Port | `~ '^[A-Z]{2}[A-Z2-9]{3}$'` (UN/LOCODE) |
-| Référence lisible | `reference ~ '^(DEMO-)?(RFQ|MSQ|MST)-[0-9]{4}-[A-Z0-9]{6}$'`, préfixe propre à la table (Q-37, S-57) |
+| Référence lisible | `reference ~ '^(DEMO-)?(RFQ\|MSQ\|MST)-[0-9]{4}-[A-Z0-9]{6}$'`, préfixe propre à la table (Q-37, S-57) |
 | Codes et statuts | `col IN (...)` avec la liste de [data-model.md](data-model.md) §5 |
 | Montants | `>= 0` (prix, totaux, coûts) ; `> 0` (montant d'un Payment Record) |
 | Quantités | `> 0` |
@@ -89,7 +93,7 @@ Règles applicatives, testées, **à réexaminer au Jour 24** (option : dénorma
 | Intervalle | `target_delivery_from <= target_delivery_to` ; `valid_from < valid_to` |
 | Une seule valeur | `product_attribute_values` : `num_nonnulls(value_decimal, value_integer, value_text, value_boolean, value_enum_code) = 1` |
 | Règle de prix | `(method = 'FIXED_PER_UNIT') = (value_currency IS NOT NULL AND price_unit IS NOT NULL)` |
-| Champs obligatoires selon le statut | `verification_records` : `status = 'PENDING' OR (decided_at IS NOT NULL AND decided_by_user_id IS NOT NULL)`. `payment_records` : `CONFIRMED` ⇒ `confirmed_*` ; `FAILED` ⇒ `failed_*` ; `REFUNDED` ⇒ `refunded_*`. `bank_details`, `receiving_accounts` : `status IN ('PENDING_VERIFICATION', 'REJECTED') OR (verified_by_user_id IS NOT NULL AND verified_at IS NOT NULL AND effective_from IS NOT NULL)` |
+| Champs obligatoires selon le statut | `verification_records` : `status = 'PENDING' OR (decided_at IS NOT NULL AND decided_by_user_id IS NOT NULL)`. `payment_records` : `CONFIRMED` ⇒ `confirmed_*` ; `FAILED` ⇒ `failed_*` ; `REFUNDED` ⇒ `refunded_*`. `bank_details`, `receiving_accounts` : `status IN ('PENDING_VERIFICATION', 'REJECTED', 'WITHDRAWN') OR (verified_by_user_id IS NOT NULL AND verified_at IS NOT NULL AND effective_from IS NOT NULL)` |
 | Statut de compte par capacité | `organization_capabilities` : `(capability = 'BUYER' AND account_status IN ('PENDING', 'ACTIVE', 'SUSPENDED', 'BLOCKED')) OR (capability = 'EXPORTER' AND account_status IN ('PENDING_ACTIVATION', 'ACTIVE', 'SUSPENDED', 'CLOSED'))` (CF-02) |
 | Propriétaire d'un document | `(owner_kind = 'ORGANIZATION') = (owner_organization_id IS NOT NULL)` |
 | Visibilité publique | `document_versions` : `visibility <> 'PUBLIC' OR document_category = 'MARKETPLACE_MEDIA'` |
@@ -113,9 +117,11 @@ Limite : ce contrôle porte sur les **organisations**. Un **utilisateur** membre
 |---|---|---|
 | `payment_records` | `confirmed_by_user_id IS NULL OR (confirmed_by_user_id IS DISTINCT FROM recorded_by_user_id AND confirmed_by_user_id IS DISTINCT FROM processing_by_user_id)` ; `refunded_by_user_id IS NULL OR refunded_by_user_id IS DISTINCT FROM recorded_by_user_id` ; remboursement par un autre que le confirmateur : proposé | S-34 ; Q-56, Q-88 |
 | `bank_details`, `receiving_accounts` | `verified_by_user_id IS NULL OR verified_by_user_id IS DISTINCT FROM created_by_user_id`, combiné au contrôle de statut de §3.2 (une ligne vérifiée a toujours un vérificateur) | S-44 |
-| `platform_role_assignments` | `granted_by_user_id IS DISTINCT FROM user_id` (pas d'auto-attribution) | S-08 |
+| `platform_role_assignments` | `granted_by_user_id IS DISTINCT FROM user_id` (pas d'auto-attribution) ; `granted_by_user_id IS NOT NULL OR is_bootstrap`, avec une seule ligne `is_bootstrap` (index unique partiel) | S-08 |
 
-Ces contrôles ne valent que si les colonnes d'acteur ne peuvent pas être réécrites après coup : droits par colonne (§6.2) et, à évaluer au Jour 33, déclencheur d'écriture unique. Avec un seul administrateur humain, la séparation des tâches ne protège rien : point noté dans les risques du Jour 3.
+Ces contrôles ne valent que si les colonnes d'acteur ne peuvent pas être réécrites après coup : droits par colonne (§6.2) et, à évaluer au Jour 33, déclencheur d'écriture unique.
+
+Avec un seul administrateur humain, ces contrôles **bloquent** l'activité au lieu de la protéger : un compte de réception ne peut pas être vérifié par son créateur, donc aucun paiement acheteur n'est enregistrable en Modèle A (`receiving_account_id` obligatoire), et aucun paiement ne peut être confirmé. Le nombre minimal d'administrateurs est donc une décision à prendre avant le Jour 33 (R-32, Q-101).
 
 ### 3.5 Évolution des listes de statuts
 
@@ -143,6 +149,7 @@ L'échelle des montants (Q-08) doit être fixée avant la première migration mo
 | `conversations` | (`context_type`, `context_id`, `channel`) | Un fil par contexte et par canal (data-model §5.8) |
 | `conversation_participants` | (`conversation_id`, `organization_id`) | |
 | `exporter_public_slugs` | (`slug`, `organization_id`) | Clé composite §2.1 |
+| `bank_details` | (`id`, `organization_id`) | Clé composite §2.1 (paiements) |
 | `exporter_profiles` | `public_slug` | S-54 |
 | `category_attributes` | (`category_code`, `code`) ; (`id`, `category_code`) | Clé composite §2.1 |
 | `products` | (`id`, `category_code`) | Clé composite §2.1 |
@@ -157,7 +164,7 @@ L'échelle des montants (Q-08) doit être fixée avant la première migration mo
 | `negotiations` | `quotation_id` | Une négociation par quotation ; à revoir si Q-39 permet une reprise |
 | `negotiation_offers` | (`negotiation_id`, `sequence_no`) | Ordre des propositions |
 | `negotiation_offer_lines` | (`offer_id`, `quotation_line_id`) | |
-| `trades` | `quotation_id` ; (`id`, `buyer_organization_id`, `exporter_organization_id`) ; (`id`, `commercial_model`) | Un Trade par quotation (BR-TRD-03), idempotence de l'acceptation ; clés composites |
+| `trades` | `quotation_id` ; (`id`, `buyer_organization_id`, `exporter_organization_id`) ; (`id`, `exporter_organization_id`) ; (`id`, `commercial_model`) | Un Trade par quotation (BR-TRD-03), idempotence de l'acceptation ; clés composites |
 | `trade_items` | (`id`, `trade_id`) | Clé composite |
 | `trade_agreements` | (`trade_id`, `kind`) ; (`id`, `trade_id`) ; (`id`, `trade_id`, `kind`) | Une convention de chaque type ; clés composites |
 | `match_runs` | (`id`, `rfq_id`) | Clé composite |
@@ -170,7 +177,7 @@ L'échelle des montants (Q-08) doit être fixée avant la première migration mo
 | Table | Index | Règle |
 |---|---|---|
 | `organization_invitations` | (`organization_id`, `lower(email)`) `WHERE status = 'PENDING'` | Une invitation en attente par email et par organisation (proposé). Une invitation expirée reste `PENDING` (expiration calculée, D-23) : le service la révoque sous verrou avant d'en créer une nouvelle |
-| `platform_role_assignments` | (`user_id`, `role_id`) `WHERE revoked_at IS NULL` | Une attribution active |
+| `platform_role_assignments` | (`user_id`, `role_id`) `WHERE revoked_at IS NULL` ; `((true))` `WHERE is_bootstrap` | Une attribution active ; une seule attribution initiale sans auteur |
 | `conversation_participants` | (`conversation_id`) `WHERE organization_id IS NULL` | Une seule ligne MadaSource par conversation |
 | `verification_records` | (`organization_id`) `WHERE status = 'PENDING'` | Une demande en cours à la fois |
 | `bank_details` | (`organization_id`, `currency`) `WHERE status = 'PENDING_VERIFICATION'` ; (`organization_id`, `currency`, `effective_from`) `WHERE status = 'VERIFIED'` | Une modification en attente par devise ; pas deux comptes vérifiés à la même date de prise d'effet. Le compte courant est calculé à la lecture (data-model §5.11) |
@@ -241,7 +248,7 @@ Les droits par colonne sont pris en charge par PostgreSQL (`GRANT UPDATE (col, .
 | `document_versions` | `INSERT`, `SELECT`, `UPDATE (visibility, visibility_changed_at, visibility_changed_by_user_id, scan_status)` | La visibilité d'un justificatif de paiement n'est pas modifiable (règle du service, data-model §5.17) |
 | `refresh_tokens` | `INSERT`, `SELECT`, `UPDATE (consumed_at, replaced_by_id)` | |
 | `messages` | `INSERT`, `SELECT` ; `UPDATE (body, edited_at)` seulement si Q-50 autorise la modification par l'auteur | |
-| Colonnes cibles d'une clé composite | Exclues de tout droit `UPDATE` (`rfqs.buyer_organization_id`, parties des quotations et des Trades, `trade_agreements.kind`, `documents.category`, `roles.scope`, `permissions.scope`…) | PostgreSQL les traite comme des colonnes de clé : leur modification prendrait un verrou `FOR UPDATE` qui bloque les insertions filles |
+| Colonnes cibles d'une clé composite | Exclues de tout droit `UPDATE` (`rfqs.buyer_organization_id`, parties des quotations et des Trades, `trade_agreements.kind`, `documents.category`, `products.category_code`, `roles.scope`, `permissions.scope`…) | PostgreSQL les traite comme des colonnes de clé : leur modification prendrait un verrou `FOR UPDATE` qui bloque les insertions filles |
 | `DELETE` | Seulement sur : tables d'association (`role_permissions`, `message_attachments`, `favorites`) ; lignes d'un brouillon (`rfq_items` d'une RFQ `DRAFT`, `product_attribute_values` facultatives) ; données temporaires (jetons expirés, `outbox_messages` envoyés ou abandonnés) | Pas de suppression physique dans le workflow normal |
 | Toutes les autres tables | `SELECT`, `INSERT`, `UPDATE` | |
 
@@ -264,7 +271,7 @@ Règles du Jour 2 (D-09), appliquées au modèle. L'ordre suit les niveaux des m
 |---|---|---|
 | Modification d'adhésion (rôle, retrait, statut) | `organizations` | Invariant « au moins un OWNER » vérifié sous verrou |
 | Révocation d'un rôle de plateforme | Ligne de l'administrateur concerné, puis relecture des administrateurs actifs | Au moins un administrateur actif (règle applicative) |
-| Changement de coordonnées bancaires | `exporter_profiles` | `uq_bank_details_one_pending` ; l'ancienne demande est close avant l'insertion de la nouvelle |
+| Changement de coordonnées bancaires | `exporter_profiles` | `uq_bank_details_one_pending` ; une nouvelle demande est refusée tant qu'une autre est en attente, le demandeur peut retirer la sienne (`WITHDRAWN`) |
 | Envoi d'une RFQ aux exportateurs | `rfqs` | `uq_rfq_recipients_rfq_id_exporter_organization_id` |
 | Création d'une quotation ou d'une version | `rfqs`, puis `quotations` | `uq_quotations_rfq_id_exporter_organization_id`, `uq_quotation_versions_quotation_id_version_no` |
 | Contre-offre | `rfqs` (si son statut change), puis `negotiations` ; relecture des offres **après** le verrou (`populate_existing`) | `uq_negotiation_offers_one_pending` |
@@ -293,6 +300,9 @@ Compteurs : `failed_login_count` est incrémenté par une instruction atomique (
 | Statut des lignes de RFQ | Q-95 |
 | Procédure d'effacement des textes immuables | Q-68 |
 | Utilisateur membre des deux parties | Q-98 |
+| Canaux de messagerie en Modèle A (conflit avec le CdC §28) | Q-99, CF-10 |
+| Compte admin titulaire d'une adhésion cliente | Q-100 |
+| Nombre minimal d'administrateurs (séparation des tâches) | Q-101, R-32 |
 | Noms des rôles PostgreSQL | Jours 4 et 6 |
 | Version de PostgreSQL | D-15 (Jour 4) ; ce document n'utilise rien au-delà de PostgreSQL 13 |
 | Toutes les contraintes du Trade | Q-82 |

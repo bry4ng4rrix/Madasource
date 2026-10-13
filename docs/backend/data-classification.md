@@ -47,7 +47,7 @@ Règles du Modèle A (constat de sécurité E2) :
 - un événement de Trade lié à une convention ne peut prendre que la visibilité de son côté ou `INTERNAL_ONLY` (`CHECK` en base, [indexes-and-constraints.md](indexes-and-constraints.md) §3.2) ;
 - un justificatif de paiement prend la visibilité du sens du paiement, sans modification possible ([data-model.md](data-model.md) §5.17) ;
 - `PUBLIC` n'est possible que pour un document de catégorie `MARKETPLACE_MEDIA` (`CHECK` en base) ;
-- conversations : un canal par côté, jamais de fil commun acheteur–exportateur sur une quotation, une négociation ou un Trade ([data-model.md](data-model.md) §5.8, constat E1).
+- conversations : un canal par côté, jamais de fil commun acheteur–exportateur sur une quotation, une négociation ou un Trade ([data-model.md](data-model.md) §5.8, constat E1). Proposition **À VALIDER** : elle contredit le CdC §28, qui prévoit une messagerie Buyer ↔ Exporter (CF-10, Q-99).
 
 | Valeur | Audiences de lecture | Objets |
 |---|---|---|
@@ -128,10 +128,10 @@ Règles (S-18, S-19), constat de sécurité M11 :
 | Liste des destinataires (`rfq_recipients`) | — | L en mode `DIRECT` ; Q-31 en mode `OPEN_MATCHING` | — (sa propre ligne seulement) | — | L |
 | `rfq_questions` | — | L | L (sa paire ; `ALL_RECIPIENTS` : toutes) | — | L |
 | `rfq_matches.score` et raisons | — | Q-31 | Q-31 | — | L |
-
-Oracle de prix (constat M11) : si le matching utilise un critère de prix et que la sélection ou le score sont visibles de l'acheteur (Q-31), l'acheteur pourrait retrouver le prix net en faisant varier son prix cible. Le prix n'est donc **pas** un critère de matching tant que ce risque n'est pas traité (Q-30, Q-31).
 | `rfq_matches.criteria_results` | — | — | — | — | L |
 | `match_runs`, `matching_configs` | — | — | — | — | L |
+
+Oracle de prix (constat M11) : si le matching utilise un critère de prix et que la sélection ou le score sont visibles de l'acheteur (Q-31), l'acheteur pourrait retrouver le prix net en faisant varier son prix cible. Le prix n'est donc **pas** un critère de matching tant que ce risque n'est pas traité (Q-30, Q-31).
 
 ### 3.5 Quotations, négociations, Trades
 
@@ -200,7 +200,9 @@ Une liste de clés interdites ne voit pas une convention `SALE` servie à l'expo
 - **schémas distincts** par convention et par audience (par exemple `SaleAgreementBuyerRead` et `SupplyAgreementExporterRead`), jamais une liste générique de conventions imbriquée dans la réponse d'un Trade ;
 - **valeurs sentinelles** dans les tests : chaque montant caché d'une audience reçoit, dans les données de test, une valeur unique et reconnaissable (par exemple `987654.3210`). Le test parcourt toute réponse sérialisée de l'audience opposée, en-têtes et corps, et échoue si la valeur y apparaît.
 
-Tests prévus : `test_sentinel_sale_amount_absent_from_exporter_responses`, `test_sentinel_supply_amount_absent_from_buyer_responses`, `test_supply_event_cannot_be_buyer_visible`, `test_model_a_negotiation_conversation_never_has_both_parties`.
+Les sentinelles couvrent aussi les **identifiants** tant que Q-27 est ouvert : l'identifiant de l'organisation acheteuse et ceux de ses utilisateurs reçoivent des UUID sentinelles, recherchés dans toute réponse servie à un exportateur. Ils peuvent en effet circuler sous d'autres clés que `buyer_organization_id` : `conversation_participants.organization_id`, `messages.author_organization_id`, `documents.owner_organization_id`, colonnes `*_by_user_id`. L'identité d'un acteur est rendue selon S-48, jamais par son identifiant brut.
+
+Tests prévus : `test_buyer_identifiers_absent_from_exporter_responses`, `test_sentinel_sale_amount_absent_from_exporter_responses`, `test_sentinel_supply_amount_absent_from_buyer_responses`, `test_supply_event_cannot_be_buyer_visible`, `test_model_a_negotiation_conversation_never_has_both_parties`.
 
 ### 3.9 Utilisateur membre de plusieurs organisations
 

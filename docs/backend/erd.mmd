@@ -263,7 +263,7 @@ erDiagram
         uuid id PK
         uuid organization_id FK "-> exporter_profiles"
         varchar certification_code
-        uuid proof_document_id FK "-> documents"
+        uuid proof_document_id FK "-> documents (composite avec organization_id)"
         date valid_until
     }
     bank_details {
@@ -346,7 +346,7 @@ erDiagram
     rfq_questions {
         uuid id PK
         uuid rfq_id FK "-> rfqs"
-        uuid recipient_id FK "-> rfq_recipients"
+        uuid recipient_id FK "-> rfq_recipients (composite avec rfq_id)"
         text question
         varchar visibility
     }
@@ -568,7 +568,8 @@ erDiagram
         char currency
         varchar status
         uuid receiving_account_id FK "-> receiving_accounts"
-        uuid beneficiary_bank_details_id FK "-> bank_details"
+        uuid exporter_organization_id "composite vers trades"
+        uuid beneficiary_bank_details_id FK "-> bank_details (composite avec exporter_organization_id)"
     }
     trades ||--o{ payment_records : "paiements"
     trade_agreements ||--o{ payment_records : "règle"
@@ -697,7 +698,7 @@ erDiagram
     }
     users ||--o{ privacy_requests : "concerne"
 
-    %% module: favorites (13)
+    %% module: favorites (13), niveau 13 ou plus selon module-boundaries §2
     favorites {
         uuid id PK
         uuid user_id FK "-> users"

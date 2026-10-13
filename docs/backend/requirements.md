@@ -203,7 +203,7 @@ Sont aussi décrits sans lettre de module : exceptions et litiges (CdC §40-41, 
 
 | ID | Exigence | Source | Statut |
 |---|---|---|---|
-| REQ-MSG-01 | Messagerie sécurisée Buyer ↔ Exporter, rattachable à : RFQ, quotation, négociation, trade, demande d'échantillon. | CdC §28 | Défini |
+| REQ-MSG-01 | Messagerie sécurisée Buyer ↔ Exporter, rattachable à : RFQ, quotation, négociation, trade, demande d'échantillon. Jour 3 : en Modèle A, canaux séparés avec MadaSource proposés, en conflit avec cette exigence (CF-10, Q-99). | CdC §28 | Défini |
 | REQ-MSG-02 | Historique des conversations préservé. Pièces jointes via le coffre documentaire. | CdC §28, RJ 30 | Défini |
 | REQ-MSG-03 | REST suffit en V1, sans WebSocket. Cette limite est documentée. | RJ 30 | Défini |
 | REQ-NOT-01 | Notifications automatiques : nouvelle RFQ, nouvelle quotation, contre-offre, quotation acceptée, nouveau Trade, paiement confirmé, nouveau document, statut du Trade modifié, échantillon expédié. | CdC §29 | Défini (destinataires : Q-52) |

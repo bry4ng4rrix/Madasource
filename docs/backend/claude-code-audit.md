@@ -101,7 +101,6 @@ Rien n'a été installé.
 | Auto-test des hooks | `python3 .claude/tests/test_hooks.py` | 0 échec |
 | Hook actif dans la session | `cat .env` lancé par Claude | Refusé par `guard_bash.py` (message `[MadaSource guard]`) |
 | Hook post-édition actif | modification de `CLAUDE.md` et d'un skill par Claude | Rappel `[MadaSource post-edit]` reçu |
-
 | Chargement des skills | liste des skills exposée par Claude Code pendant la session | **Vérifié** : les 8 skills du projet ont été détectés à chaud, sans redémarrage |
 | Chargement des agents | appel de l'agent `code-reviewer` pendant la session | **Chargés avec délai** : un premier appel a échoué (« Agent type 'code-reviewer' not found »). Plus tard dans la même session, sans redémarrage, Claude Code a annoncé les 6 agents comme disponibles. |
 

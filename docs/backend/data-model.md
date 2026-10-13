@@ -29,7 +29,7 @@ Statuts utilisés :
 | Sujet | Convention | Statut |
 |---|---|---|
 | Clé primaire | `id uuid`, générée par l'application (version : D-15). Exceptions : tables à clé naturelle ou partagée (`buyer_profiles`, `exporter_profiles`, `category_definitions`, `exporter_public_slugs`, tables `*_financials`) et tables d'association (clé composite). | Proposé |
-| Colonnes communes | Toute table a `created_at timestamptz NOT NULL`. Une table modifiable a aussi `updated_at timestamptz NOT NULL`. Une table **immuable** n'a pas de `updated_at` ; la liste des tables immuables et des colonnes modifiables est celle de [indexes-and-constraints.md](indexes-and-constraints.md) §6.2, qui fait foi. Horodatages fixés par l'application (horloge injectable, D-08). | Proposé |
+| Colonnes communes | Toute table a `created_at timestamptz NOT NULL`. Une table entièrement modifiable a aussi `updated_at timestamptz NOT NULL`. Une table immuable, ou modifiable sur quelques colonnes seulement, n'a `updated_at` que s'il figure dans ses droits par colonne : la liste de [indexes-and-constraints.md](indexes-and-constraints.md) §6.2 fait foi, et la classe de base SQLAlchemy ne l'ajoute pas automatiquement. Horodatages fixés par l'application (horloge injectable, D-08). | Proposé |
 | Dates | `timestamptz` pour les instants, `date` pour les dates calendaires. | Défini (RJ section 1) |
 | Montants | `numeric(19,4)` avec une colonne de devise `char(3)` (ISO 4217) à côté. Jamais de `float`. | Défini / Proposé (précision : Q-08) |
 | Quantités | `numeric(18,3)` avec une colonne d'unité `varchar(8)` (codes `KG`, `T`…, Q-21). | Proposé |
@@ -268,8 +268,9 @@ Invariant applicatif : une organisation garde toujours au moins un OWNER actif. 
 | Colonne | Type | Contraintes | Remarque |
 |---|---|---|---|
 | `user_id` | uuid | NN, FK → `users` | |
-| `role_id` | uuid | NN, FK → `roles` | Rôle de portée `PLATFORM` |
-| `granted_by_user_id` | uuid | FK → `users` ; CHECK `granted_by_user_id IS DISTINCT FROM user_id` | Nul pour le premier admin (S-08) ; pas d'auto-attribution |
+| `role_id`, `role_scope` | | FK composite (`role_id`, `role_scope`) → `roles` (`id`, `scope`) ; CHECK `role_scope = 'PLATFORM'` | Seul un rôle de plateforme peut être attribué ici |
+| `granted_by_user_id` | uuid | FK → `users` ; CHECK `granted_by_user_id IS DISTINCT FROM user_id` ; CHECK `granted_by_user_id IS NOT NULL OR is_bootstrap` | Pas d'auto-attribution |
+| `is_bootstrap` | boolean | NN, défaut false ; index unique partiel `WHERE is_bootstrap` | Seule l'attribution initiale du premier admin (S-08, Q-14) peut se passer d'auteur |
 | `granted_at` | timestamptz | NN | |
 | `revoked_at`, `revoked_by_user_id` | timestamptz, uuid | | U (`user_id`, `role_id`) tant que non révoqué |
 
@@ -327,7 +328,7 @@ Invariant applicatif : une organisation garde toujours au moins un OWNER actif. 
 Règles :
 - dans une RFQ, le contexte est la paire RFQ–exportateur (`RFQ_RECIPIENT`, S-31) ;
 - pour un Trade, c'est une convention (`TRADE_AGREEMENT`), c'est-à-dire une relation commerciale (Q-82) ;
-- **canal** (constat de sécurité E1) : en Modèle A, aucune conversation ne réunit l'acheteur et l'exportateur sur une quotation, une négociation ou un Trade, car un message sur le prix final révélerait la marge. L'acheteur échange avec MadaSource (`BUYER_MADASOURCE`), l'exportateur aussi (`EXPORTER_MADASOURCE`). Le canal `DIRECT` est réservé au contexte `RFQ_RECIPIENT` (risque résiduel R-05, Q-85) et au Modèle B. Les participants doivent correspondre au canal (règle du service, testée).
+- **canal** (proposé après le constat de sécurité E1 ; **À VALIDER**, en conflit avec le CdC §28 : CF-10, Q-99) : en Modèle A, aucune conversation ne réunit l'acheteur et l'exportateur sur une quotation, une négociation ou un Trade, car un message sur le prix final révélerait la marge. L'acheteur échange avec MadaSource (`BUYER_MADASOURCE`), l'exportateur aussi (`EXPORTER_MADASOURCE`). Le canal `DIRECT` est réservé au contexte `RFQ_RECIPIENT` (risque résiduel R-05, Q-85) et au Modèle B. Les participants doivent correspondre au canal (règle du service, testée). Si le CdC est maintenu tel quel, la colonne `channel` reste en place avec la seule valeur `DIRECT`, et le risque R-05 est accepté.
 
 **`conversation_participants`**
 
@@ -381,10 +382,12 @@ Règles :
 | `internal_notes` | text | | `INTERNAL_ONLY` |
 | `supersedes_record_id` | uuid | FK → `verification_records` | Historique des décisions |
 
-Statut de vérification **de l'organisation** (Q-12, CF-01), calculé :
-- `UNVERIFIED` : aucun enregistrement ;
-- `IN_REVIEW` : dernier enregistrement `PENDING` ;
-- `VERIFIED` (avec son niveau), `REJECTED`, `EXPIRED`, `SUSPENDED` : selon le dernier enregistrement.
+Statut de vérification **de l'organisation** (Q-12, CF-01), calculé à la lecture (D-23). Proposition, à valider avec Q-15 et Q-16 :
+- s'il existe des enregistrements `VERIFIED` non expirés : `VERIFIED`, au plus haut de leurs niveaux. Une demande de niveau supérieur, en cours ou refusée, ne retire pas le niveau acquis ;
+- sinon, selon le dernier enregistrement **décidé** : `SUSPENDED`, `EXPIRED` ou `REJECTED` ;
+- sinon : `IN_REVIEW` si une demande est en cours, `UNVERIFIED` s'il n'y a aucun enregistrement ;
+- la demande en cours est exposée à part (`pending_request`), sans masquer un niveau acquis ;
+- une suspension vise l'organisation : elle passe tous ses enregistrements `VERIFIED` en `SUSPENDED` (à confirmer, Q-15).
 
 **`verification_reviewed_documents`** : `verification_record_id` FK → `verification_records`, `document_id` FK → `documents`, clé primaire composite.
 
@@ -430,10 +433,10 @@ Statut de vérification **de l'organisation** (Q-12, CF-01), calculé :
 | `encryption_key_id` | varchar(32) | NN | Rotation (Q-81) |
 | `masked_display` | varchar(32) | NN | Exemple : `•••• 4821` |
 | `bank_name`, `bank_country_code`, `currency` | varchar, char(2), char(3) | NN | |
-| `status` | varchar(24) | NN, CHECK (`PENDING_VERIFICATION`, `VERIFIED`, `REJECTED`, `RETIRED`) | Une demande en attente par organisation et par devise. Le **compte courant** est calculé à la lecture (D-23) : la ligne `VERIFIED` au plus grand `effective_from` déjà atteint. L'ancien compte reste donc utilisé jusqu'à la prise d'effet du nouveau, sans tâche planifiée |
-| `effective_from` | timestamptz | CHECK : NN si `VERIFIED` | Prise d'effet différée (S-44) ; U (`organization_id`, `currency`, `effective_from`) pour les lignes `VERIFIED` |
+| `status` | varchar(24) | NN, CHECK (`PENDING_VERIFICATION`, `VERIFIED`, `REJECTED`, `WITHDRAWN`, `RETIRED`) | Une demande en attente par organisation et par devise ; une nouvelle demande est refusée tant qu'une autre est en attente, et le demandeur peut retirer la sienne (`WITHDRAWN`). Le **compte courant** est calculé à la lecture (D-23) : la ligne `VERIFIED` au plus grand `effective_from` déjà atteint. L'ancien compte reste donc utilisé jusqu'à la prise d'effet du nouveau, sans tâche planifiée |
+| `effective_from` | timestamptz | Voir le contrôle de statut ci-dessous | Prise d'effet différée (S-44) ; U (`organization_id`, `currency`, `effective_from`) pour les lignes `VERIFIED` ; U (`id`, `organization_id`) pour la clé composite des paiements |
 | `created_by_user_id` | uuid | NN, FK → `users` | |
-| `verified_by_user_id`, `verified_at` | uuid, timestamptz | CHECK `status IN ('PENDING_VERIFICATION', 'REJECTED') OR (verified_by_user_id IS NOT NULL AND verified_at IS NOT NULL)` ; CHECK vérificateur différent du créateur | Une ligne vérifiée a toujours un vérificateur |
+| `verified_by_user_id`, `verified_at` | uuid, timestamptz | CHECK `status IN ('PENDING_VERIFICATION', 'REJECTED', 'WITHDRAWN') OR (verified_by_user_id IS NOT NULL AND verified_at IS NOT NULL AND effective_from IS NOT NULL)` ; CHECK vérificateur différent du créateur | Une ligne vérifiée, puis éventuellement retirée (`RETIRED`), a toujours un vérificateur |
 | `rejected_by_user_id`, `rejected_at` | uuid, timestamptz | | |
 
 ### 5.12 products (niveau 10)
@@ -458,7 +461,7 @@ Statut de vérification **de l'organisation** (Q-12, CF-01), calculé :
 | Colonne | Type | Contraintes | Remarque |
 |---|---|---|---|
 | `organization_id` | uuid | NN, FK → `organizations` | Exportateur propriétaire |
-| `category_code` | varchar(16) | NN, FK → `category_definitions` | U (`id`, `category_code`) pour la cohérence des attributs |
+| `category_code` | varchar(16) | NN, FK → `category_definitions` | U (`id`, `category_code`) pour la cohérence des attributs ; fixée à la création (cible d'une clé composite) |
 | `name` | varchar(200) | NN | |
 | `description` | text | | |
 | `origin_country_code`, `origin_region` | char(2), varchar(120) | NN pour le pays | |
@@ -556,7 +559,7 @@ Une ligne peut être retirée d'une RFQ `DRAFT` (suppression physique autorisée
 | `status` | varchar(16) | NN, CHECK (`DRAFT`, `ACTIVE`, `RETIRED`) | |
 | `created_by_user_id` | uuid | NN, FK → `users` | |
 
-**`external_costs`** (immuable ; CdC §33)
+**`external_costs`** (immuable ; CdC §33 ; une confirmation crée une nouvelle ligne `CONFIRMED`, référencée par les versions suivantes)
 
 | Colonne | Type | Contraintes | Remarque |
 |---|---|---|---|
@@ -722,7 +725,7 @@ Ces données descriptives sont communes aux deux conventions.
 
 ### 5.17 payment_records (niveau 15)
 
-**`receiving_accounts`** (comptes de réception de MadaSource, S-44) : mêmes colonnes chiffrées que `bank_details`, plus `label` ; mêmes statuts (`PENDING_VERIFICATION`, `VERIFIED`, `REJECTED`, `RETIRED`) et mêmes contraintes (vérificateur obligatoire et différent du créateur) ; `effective_from` ; `created_by_user_id` NN. Compte courant par devise calculé comme pour `bank_details`.
+**`receiving_accounts`** (comptes de réception de MadaSource, S-44) : mêmes colonnes chiffrées que `bank_details`, plus `label` ; mêmes statuts (`PENDING_VERIFICATION`, `VERIFIED`, `REJECTED`, `WITHDRAWN`, `RETIRED`) et mêmes contraintes (vérificateur obligatoire et différent du créateur) ; `effective_from` ; `created_by_user_id` NN. Compte courant par devise calculé comme pour `bank_details`.
 
 **`payment_records`**
 
@@ -736,7 +739,8 @@ Ces données descriptives sont communes aux deux conventions.
 | `payment_date` | date | | |
 | `status` | varchar(16) | NN, CHECK (`PENDING`, `PROCESSING`, `CONFIRMED`, `FAILED`, `REFUNDED`) | CdC §30 |
 | `receiving_account_id` | uuid | FK → `receiving_accounts` ; CHECK `(receiving_account_id IS NOT NULL) = (direction = 'BUYER_TO_MADASOURCE')` | Compte de MadaSource crédité |
-| `beneficiary_bank_details_id` | uuid | FK → `bank_details` ; CHECK `(beneficiary_bank_details_id IS NOT NULL) = (direction = 'MADASOURCE_TO_EXPORTER')` | Compte de l'exportateur effectivement utilisé : preuve en cas de fraude au changement de coordonnées (S-44). En Modèle B (`BUYER_TO_EXPORTER`) : Q-55 |
+| `exporter_organization_id` | uuid | NN, FK composite (`trade_id`, `exporter_organization_id`) → `trades` (`id`, `exporter_organization_id`) | Exportateur du Trade, dénormalisé |
+| `beneficiary_bank_details_id` | uuid | FK composite (`beneficiary_bank_details_id`, `exporter_organization_id`) → `bank_details` (`id`, `organization_id`) ; CHECK `(beneficiary_bank_details_id IS NOT NULL) = (direction = 'MADASOURCE_TO_EXPORTER')` | Le compte appartient à l'exportateur du Trade (R-28) ; le service exige aussi qu'il soit le compte courant vérifié à la date du paiement (S-44). Compte de l'exportateur effectivement utilisé : preuve en cas de fraude au changement de coordonnées (S-44). En Modèle B (`BUYER_TO_EXPORTER`) : Q-55 |
 | `recorded_by_user_id`, `recorded_at` | uuid, timestamptz | NN | |
 | `processing_by_user_id`, `processing_at` | | | |
 | `confirmed_by_user_id`, `confirmed_at` | | CHECK confirmateur ≠ auteur de la saisie et ≠ auteur du passage en Processing (S-34) | |
@@ -868,9 +872,9 @@ Preuves : `documents` de contexte `DISPUTE`.
 | Séparation des tâches sur les paiements | `CHECK` entre colonnes d'acteurs | S-34 |
 | Coordonnées bancaires : vérificateur ≠ créateur, une ligne active par devise | `CHECK`, index unique partiel | S-44 |
 | Historiques immuables | Pas de `updated_at`, pas de chemin de modification, droits restreints sur `audit_logs` | BR-AUD-02, BR-TRD-07 |
-| Au moins un OWNER par organisation | Règle applicative (service `organizations`), sous verrou de la ligne `organizations` | Q-10 |
+| Au moins un OWNER par organisation | Règle applicative (service `organizations`), sous verrou de la ligne `organizations` | Proposé, déduit de Q-10 |
 | Cohérence de la chaîne RFQ → quotation → Trade → convention → paiement, événement, litige | Clés étrangères composites ([indexes-and-constraints.md](indexes-and-constraints.md) §2.1) | S-30, S-43 |
-| Pas de fil commun acheteur–exportateur en Modèle A | Canal de conversation (§5.8), vérifié par le service | Q-82, R-05 |
+| Pas de fil commun acheteur–exportateur en Modèle A | Canal de conversation (§5.8), vérifié par le service | Proposé, **À VALIDER** : conflit avec le CdC §28 (CF-10, Q-99) |
 | Visibilité d'un événement ou d'un justificatif bornée par sa convention | `CHECK` sur `trade_events` ; visibilité dérivée pour les justificatifs | S-40, Q-82 |
 | Un utilisateur n'agit pas des deux côtés d'un même objet | Règle applicative : refus de soumettre, contre-proposer, accepter ou évaluer si l'acteur a aussi une adhésion active chez la contrepartie | S-36, Q-98 |
 | Permissions de plateforme jamais liées à un rôle d'organisation | Clés composites sur la portée (`role_permissions`) | S-12 |
@@ -884,5 +888,8 @@ Preuves : `documents` de contexte `DISPUTE`.
 | Q-96 | Ajout des valeurs de visibilité `OWNER_ONLY` et `PUBLIC` aux quatre valeurs de Q-82, pour les objets d'une seule organisation et les médias du marketplace. |
 | Q-97 | Le motif d'un changement de statut de compte (suspension, blocage, clôture) est-il communiqué à l'organisation concernée ? Proposition : un motif communiqué distinct de la note interne, comme pour la vérification (S-47). |
 | Q-98 | Un utilisateur membre à la fois de l'organisation acheteuse et de l'organisation exportatrice d'un même objet (Q-74) : interdire cette double adhésion, ou seulement bloquer ses actions sur ces objets ? En Modèle A, il lirait les deux conventions et donc la marge. |
+| Q-99 | En Modèle A, les messages entre l'acheteur et l'exportateur sur une quotation, une négociation ou un Trade passent-ils par des canaux séparés avec MadaSource (proposition), ou restent-ils directs comme le prévoit le CdC §28 (CF-10) ? |
+| Q-100 | Un compte administrateur MadaSource peut-il aussi détenir une adhésion à une organisation cliente ? Proposition : non (S-33 du Jour 2, constat E-6). |
+| Q-101 | Combien d'administrateurs humains en V1 ? La séparation des tâches (paiements, comptes de réception, coordonnées bancaires) exige au moins deux personnes ; avec une seule, ces opérations sont bloquées par la base. |
 
 Les autres points `À VALIDER` renvoient aux questions existantes (Q-03 à Q-06, Q-08, Q-18 à Q-21, Q-24, Q-26, Q-30, Q-34, Q-38, Q-39, Q-44, Q-48, Q-50, Q-53, Q-57 à Q-60, Q-63, Q-65, Q-69, Q-80, Q-81, Q-84, Q-85, Q-92).

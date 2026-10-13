@@ -1,6 +1,6 @@
 # Risques, contradictions et questions ouvertes — MadaSource
 
-Jour 1 · 2026-10-12 · Statut : à revoir avec le client · **Mis à jour au Jour 2** : risques R-26 à R-31, contradictions SRC-16 à SRC-19, questions Q-78 à Q-93 (marquées « (J2) »)
+Jour 1 · 2026-10-12 · Statut : à revoir avec le client · **Mis à jour au Jour 2** : risques R-26 à R-31, contradictions SRC-16 à SRC-19, questions Q-78 à Q-93 (marquées « (J2) ») · **Mis à jour au Jour 3** (2026-10-13) : réponses PROPOSED annotées, risque R-32, questions Q-94 à Q-101 (marquées « (J3) »)
 
 Ce document est le point d'entrée des décisions `À VALIDER`. Chaque question indique le jour de la roadmap backend qu'elle bloque ou influence. Une question tranchée est déplacée en section 5 avec la décision et sa date, jamais supprimée.
 
@@ -41,6 +41,7 @@ Impact estimé : Élevé, Moyen ou Faible. L'impact est une estimation d'analyse
 | R-29 | (J2) Fuite entre exportateurs concurrents destinataires d'une même RFQ : questions, documents, conversations. | Sécurité / métier | Élevé | Rattachement à la paire (RFQ, exportateur), participants explicites (S-31, S-46). | Q-84 |
 | R-30 | (J2) Instance DEMO utilisée comme fausse preuve de paiement ou d'expédition. | Métier / sécurité | Moyen | Espace de noms d'identifiants distinct, marqueur dans chaque réponse et document, emails désactivés (S-57). | Q-67 |
 | R-31 | (J2) Prix accepté différent du prix affiché, si l'offre ou les règles changent pendant la consultation. | Métier | Moyen | Version de l'offre présentée et acceptée (S-43). | Q-91 |
+| R-32 | (J3) Un seul administrateur humain : les contrôles de séparation des tâches en base bloquent la vérification des comptes de réception et la confirmation des paiements, donc tout paiement en Modèle A. | Exploitation | Élevé | Au moins deux administrateurs avant le Jour 33, ou décision explicite sur la séparation des tâches ([indexes-and-constraints.md](indexes-and-constraints.md) §3.4). | Q-101, Q-88 |
 
 ## 2. Matrice de périmètre (synthèse)
 
@@ -106,6 +107,7 @@ Format : question — contexte — jour bloqué ou influencé.
 - **Q-76** — Durée de vie des tokens d'accès et de rafraîchissement, rotation, politique de mot de passe (longueur, complexité), verrouillage après échecs de connexion. — RJ 10 (« selon les règles validées ») — J8, J10.
 - **Q-80** — (J2) Second facteur d'authentification obligatoire pour les administrateurs ? Proposé, ou obligatoire, pour les utilisateurs des organisations clientes ? — CdC §60 ; S-09 — J10.
 - **Q-98** — (J3) Un utilisateur membre à la fois de l'organisation acheteuse et de l'organisation exportatrice d'un même objet (possible avec Q-74) : interdire cette double adhésion, ou seulement bloquer ses actions (quotation, contre-offre, acceptation, avis) sur ces objets ? En Modèle A, il lirait les deux conventions, donc la marge, en changeant d'organisation active. Proposition : blocage des actions, plus signalement à l'acceptation d'une invitation. — CdC §54, §61 ; S-36 ; data-classification.md §3.9 — J9, J24 à J27.
+- **Q-100** — (J3) Un compte administrateur MadaSource peut-il aussi détenir une adhésion à une organisation cliente ? Q-74 dit « pas membres par défaut ». Proposition : non (S-33, constat de sécurité E-6). — CdC §53 ; Q-74 — J9, J10.
 - **Q-97** — (J3) Le motif d'un changement de statut de compte (suspension, blocage, clôture) est-il communiqué à l'organisation concernée ? Proposition : un motif communiqué distinct de la note interne, comme pour la vérification (S-47). — CdC §10, §35-36 ; data-classification.md — J11, J13.
 
 ### 4.3 Vérification
@@ -181,6 +183,7 @@ Format : question — contexte — jour bloqué ou influencé.
 ### 4.11 Messagerie et notifications
 
 - **Q-50** — L'admin peut-il lire les conversations ? Si oui, avec motif, audit et information des participants (S-46) ? Un auteur peut-il modifier ou supprimer son message ? — CdC §28, §34 — J30.
+- **Q-99** — (J3) En Modèle A, les messages entre l'acheteur et l'exportateur sur une quotation, une négociation ou un Trade passent-ils par des canaux séparés avec MadaSource (proposition de l'équipe, pour que la marge ne se déduise pas des messages), ou restent-ils directs comme le prévoit le CdC §28 ? Conflit CF-10. — CdC §28, §2 ; Q-82 ; R-05 — J30, avant J24.
 - **Q-51** — Échange de coordonnées directes : autorisé, masqué ou signalé ? Un prix écrit dans un message échappe à toute projection (R-05). — CdC §61 — J30.
 - **Q-52** — Fournisseur d'email (V1 ou plus tard) ; destinataires de chaque notification ; notifications supplémentaires (contre-offre exportateur, vérification, expiration proche, litige). — CdC §29 — J11, J31.
 
@@ -215,6 +218,7 @@ Format : question — contexte — jour bloqué ou influencé.
 - **Q-63** — Favoris, recherche globale et agrégations des tableaux de bord Buyer et Exporter : V1 ou plus tard ? — CdC §48-51 — J13 à J35.
 - **Q-64** — Module admin « Partners » : désactivé en V1 ? — CdC §34 — J35.
 - **Q-89** — (J2) En V1, tous les admins voient-ils marges, données bancaires, documents privés et conversations, ou faut-il répartir les ensembles de permissions admin entre plusieurs personnes ? — CdC §53 ; S-12 — J9.
+- **Q-101** — (J3) Combien d'administrateurs humains en V1 ? La séparation des tâches (confirmation des paiements, vérification des comptes de réception et des coordonnées bancaires) exige au moins deux personnes ; avec une seule, la base bloque ces opérations (R-32). — CdC §30, §53 ; S-34, S-44 — J9, J33.
 
 ### 4.17 Transverse
 
@@ -245,11 +249,11 @@ Format : question — contexte — jour bloqué ou influencé.
 | J2-J3 (architecture, données) | Q-09, Q-10, Q-12, Q-25, Q-37, Q-66, Q-67, Q-68, Q-74, Q-82 : **réponses reçues le 2026-10-13, PROPOSED**, à approuver ([registre des décisions](../decisions/architecture-decisions.md)). Reste ouverte : Q-75. |
 | Avant J9 (planification) | Q-93 : réponse PROPOSED reçue ; point non résolu CF-08 / SQ-02, à trancher **avant J14** ([dependency-graph.md](dependency-graph.md)) |
 | J4 (initialisation du dépôt) | Q-79 |
-| J8-J15 (sécurité, accès, comptes, vérification) | Q-11, Q-13, Q-14, Q-15, Q-16, Q-76, Q-80, Q-81, Q-87, Q-89, Q-90, Q-96, Q-97, Q-98 ; approbation de Q-09, Q-10, Q-12, Q-74 ; SQ-01, **SQ-02** |
+| J8-J15 (sécurité, accès, comptes, vérification) | Q-11, Q-13, Q-14, Q-15, Q-16, Q-76, Q-80, Q-81, Q-87, Q-89, Q-90, Q-96, Q-97, Q-98, Q-100, Q-101 ; approbation de Q-09, Q-10, Q-12, Q-74 ; SQ-01, **SQ-02** |
 | J16-J18 (produits, marketplace) | Q-06, Q-17, Q-18, Q-19, Q-20, Q-21, Q-77, Q-78, Q-86 |
 | J19-J23 (RFQ, matching) | Q-22, Q-23, Q-24, Q-27, Q-30, Q-31, Q-32, Q-84, Q-85, Q-95 ; approbation de Q-25, Q-37 ; **SQ-03** (avant J21), SQ-04 |
-| J24-J27 (quotations, négociation, Trade) | **Q-01**, Q-02, Q-03, Q-04, **Q-05**, Q-26, Q-34, Q-35, Q-38, **Q-82** (approbation), Q-91, Q-94, Q-98 ; **SQ-05** (avant J24) |
-| J28-J35 (opérations) | **Q-41**, **Q-42**, Q-43, Q-47, Q-53, **Q-54**, Q-58, Q-59, Q-61, Q-62, Q-83, Q-88, Q-92, Q-96 |
+| J24-J27 (quotations, négociation, Trade) | **Q-01**, Q-02, Q-03, Q-04, **Q-05**, Q-26, Q-34, Q-35, Q-38, **Q-82** (approbation), Q-91, Q-94, Q-98, Q-99 ; **SQ-05** (avant J24) |
+| J28-J35 (opérations) | **Q-41**, **Q-42**, Q-43, Q-47, Q-53, **Q-54**, Q-58, Q-59, Q-61, Q-62, Q-83, Q-88, Q-92, Q-96, Q-99, Q-101 |
 
 ## 5. Décisions prises
 

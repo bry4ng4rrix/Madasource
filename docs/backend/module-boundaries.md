@@ -47,7 +47,7 @@ Les entités sont indicatives. Le modèle proposé au Jour 3, qui fait foi, est 
 
 **Socle (niveau 0)**, ordre interne `core` → `db` → `common` → `integrations`. Il ne contient aucune règle métier :
 - `core` : configuration, journalisation, primitives de sécurité, exceptions, feature flags, codes de catégories ;
-- `db` : base déclarative, session, nommage, tables techniques (compteurs D-16), outil d'unité de travail séparée (D-29) ;
+- `db` : base déclarative, session, nommage, tables techniques (compteurs D-16, supprimés si Q-37 est approuvée), outil d'unité de travail séparée (D-29) ;
 - `common` : Money, Quantity, Clock, Actor, pagination, codes de référence ;
 - `integrations` : stockage, email, outbox (D-20).
 
