@@ -203,7 +203,7 @@ Index proposés pour les listes de la roadmap. Ils seront confirmés par `EXPLAI
 | `notifications` | (`recipient_user_id`, `created_at`, `id`) ; (`recipient_user_id`) `WHERE read_at IS NULL` | Flux par curseur ; compteur non lus |
 | `documents` | (`context_type`, `context_id`) ; (`owner_organization_id`) ; (`related_trade_id`) | Documents d'un objet, d'une organisation, d'un Trade |
 | `messages` | (`conversation_id`, `created_at`, `id`) | Flux par curseur |
-| `verification_records` | (`organization_id`, `requested_at` DESC) | Dernier enregistrement, lu par le matching et le marketplace |
+| `verification_records` | (`organization_id`, `level`) `WHERE status = 'VERIFIED'` ; (`organization_id`, `decided_at` DESC) | Niveau acquis le plus haut et dernière décision (statut calculé, data-model §5.10), lus par le matching et le marketplace ; à confirmer par `EXPLAIN` (Audit C) |
 | `products` | (`category_code`, `published_at`) `WHERE status = 'PUBLISHED'` ; (`organization_id`, `status`) ; GIN (`certification_codes`) | Marketplace ; catalogue de l'exportateur ; filtre par certification |
 | `product_attribute_values` | (`attribute_id`, `value_enum_code`) ; (`attribute_id`, `value_decimal`) | Filtres d'attributs du marketplace |
 | `rfqs` | (`buyer_organization_id`, `status`, `created_at`) | Liste des RFQ de l'acheteur |
@@ -247,6 +247,7 @@ Les droits par colonne sont pris en charge par PostgreSQL (`GRANT UPDATE (col, .
 | `bank_details`, `receiving_accounts` | `INSERT`, `SELECT`, `UPDATE` sur `status`, `verified_*`, `rejected_*`, `effective_from`, `updated_at` | Les colonnes chiffrées ne se réécrivent jamais sur place : un changement crée une nouvelle ligne, soumise à S-44 |
 | `document_versions` | `INSERT`, `SELECT`, `UPDATE (visibility, visibility_changed_at, visibility_changed_by_user_id, scan_status)` | La visibilité d'un justificatif de paiement n'est pas modifiable (règle du service, data-model §5.17) |
 | `refresh_tokens` | `INSERT`, `SELECT`, `UPDATE (consumed_at, replaced_by_id)` | |
+| `platform_role_assignments` | `INSERT`, `SELECT`, `UPDATE (revoked_at, revoked_by_user_id)` | Rôle, auteur et attribution initiale figés : les contrôles de §3.4 ne sont pas contournables par réécriture |
 | `messages` | `INSERT`, `SELECT` ; `UPDATE (body, edited_at)` seulement si Q-50 autorise la modification par l'auteur | |
 | Colonnes cibles d'une clé composite | Exclues de tout droit `UPDATE` (`rfqs.buyer_organization_id`, parties des quotations et des Trades, `trade_agreements.kind`, `documents.category`, `products.category_code`, `roles.scope`, `permissions.scope`…) | PostgreSQL les traite comme des colonnes de clé : leur modification prendrait un verrou `FOR UPDATE` qui bloque les insertions filles |
 | `DELETE` | Seulement sur : tables d'association (`role_permissions`, `message_attachments`, `favorites`) ; lignes d'un brouillon (`rfq_items` d'une RFQ `DRAFT`, `product_attribute_values` facultatives) ; données temporaires (jetons expirés, `outbox_messages` envoyés ou abandonnés) | Pas de suppression physique dans le workflow normal |

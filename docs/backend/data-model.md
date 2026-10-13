@@ -573,6 +573,7 @@ Une ligne peut être retirée d'une RFQ `DRAFT` (suppression physique autorisée
 | `quoted_at`, `valid_until` | timestamptz | NN | Validité calculée à la lecture (D-23, BR-PRC-08) |
 | `confirmation_status` | varchar(16) | NN, CHECK (`UNCONFIRMED`, `CONFIRMED`) | |
 | `entered_by_user_id` | uuid | NN, FK → `users` | Qui saisit : Q-04 |
+| `confirms_external_cost_id` | uuid | FK → `external_costs` | Estimation que cette ligne confirme (traçabilité) ; nul pour une estimation |
 
 **`quotations`**
 
@@ -864,7 +865,7 @@ Preuves : `documents` de contexte `DISPUTE`.
 |---|---|---|
 | Acheteur ≠ exportateur sur une RFQ, une quotation, un Trade, un échantillon | Colonnes dénormalisées, clés étrangères composites et `CHECK` sur la même ligne | S-36, Q-09 |
 | Une quotation vient d'un destinataire actif de la RFQ | Clé composite vers `rfq_recipients`, plus statut vérifié par le service | S-30 |
-| Un Trade par quotation, une ligne de RFQ attribuée une seule fois | `UNIQUE` sur `trades.quotation_id` et `trade_items.rfq_item_id` | BR-TRD-03, Q-26 |
+| Un Trade par quotation, une ligne de RFQ attribuée à un seul Trade non annulé | `UNIQUE` sur `trades.quotation_id` ; index unique partiel sur `trade_items.rfq_item_id` `WHERE released_at IS NULL` | BR-TRD-03, Q-26 |
 | Une seule acceptation par négociation | Index unique partiel sur `negotiation_offers` (`status = ACCEPTED`) | BR-NEG-04 |
 | Prix présenté = prix accepté | Versions immuables (`quotation_versions`), acceptation par identifiant et version | S-43 |
 | Termes figés | Conventions et lignes copiées à l'acceptation, jamais recalculées | BR-TRD-05 |
@@ -890,6 +891,6 @@ Preuves : `documents` de contexte `DISPUTE`.
 | Q-98 | Un utilisateur membre à la fois de l'organisation acheteuse et de l'organisation exportatrice d'un même objet (Q-74) : interdire cette double adhésion, ou seulement bloquer ses actions sur ces objets ? En Modèle A, il lirait les deux conventions et donc la marge. |
 | Q-99 | En Modèle A, les messages entre l'acheteur et l'exportateur sur une quotation, une négociation ou un Trade passent-ils par des canaux séparés avec MadaSource (proposition), ou restent-ils directs comme le prévoit le CdC §28 (CF-10) ? |
 | Q-100 | Un compte administrateur MadaSource peut-il aussi détenir une adhésion à une organisation cliente ? Proposition : non (S-33 du Jour 2, constat E-6). |
-| Q-101 | Combien d'administrateurs humains en V1 ? La séparation des tâches (paiements, comptes de réception, coordonnées bancaires) exige au moins deux personnes ; avec une seule, ces opérations sont bloquées par la base. |
+| Q-101 | Combien d'administrateurs humains en V1 ? La séparation des tâches exige au moins deux personnes pour vérifier un compte de réception de MadaSource et pour confirmer un paiement ; avec une seule, ces opérations sont bloquées par la base. |
 
 Les autres points `À VALIDER` renvoient aux questions existantes (Q-03 à Q-06, Q-08, Q-18 à Q-21, Q-24, Q-26, Q-30, Q-34, Q-38, Q-39, Q-44, Q-48, Q-50, Q-53, Q-57 à Q-60, Q-63, Q-65, Q-69, Q-80, Q-81, Q-84, Q-85, Q-92).

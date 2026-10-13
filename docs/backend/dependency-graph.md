@@ -164,8 +164,8 @@ Pour chaque jour : tables créées (d'après le modèle de données), prérequis
 | 24 | `pricing_rule_versions`, `external_costs`, `quotations`, `quotation_versions`, `quotation_version_financials`, `quotation_lines`, `quotation_version_costs` | Jours 19 à 21 | **Q-01** ; Q-02, Q-03, Q-04, Q-08, Q-34, Q-82, Q-91, Q-94 |
 | 25 | Validité et comparaison ; `exchange_rates` si Q-65 | Jour 24 | Q-34, Q-65, Q-91 |
 | 26 | `negotiations`, `negotiation_offers`, `negotiation_offer_lines`, `negotiation_offer_financials`, `offer_external_costs` | Jours 24 et 25 | **Q-05** ; Q-38, Q-39 |
-| 27 | `trades`, `trade_items`, `trade_agreements`, `trade_agreement_lines`, `trade_financials` ; `trade_events` (événement de création, SQ-06) | Jours 24 à 26 stables ; modèle commercial validé | **Q-82** ; Q-26, Q-95, Q-98 |
-| 28 | Machine d'état ; événements de transition | Jour 27 ; `documents` pour `trade_events.document_id` (SQ-02) | **Q-41** ; Q-44, Q-46 |
+| 27 | `trades`, `trade_items`, `trade_agreements`, `trade_agreement_lines`, `trade_financials` ; `trade_events` (événement de création, SQ-06) | Jours 24 à 26 stables ; modèle commercial validé ; `documents` pour `trade_events.document_id` (SQ-02 ; si les documents sont différés au Jour 29, la colonne est ajoutée ce jour-là par une migration additive) | **Q-82** ; Q-26, Q-95, Q-98 |
+| 28 | Machine d'état ; événements de transition | Jour 27 | **Q-41** ; Q-44, Q-46 |
 | 29 | `documents`, `document_versions` (complets) | Jour 9 (P-01) | Q-47, Q-48, Q-69, Q-83, Q-96 |
 | 30 | `conversations`, `conversation_participants`, `messages`, `message_attachments` | Jour 29 | Q-50, Q-84, Q-99 |
 | 31 | `notifications` ; rétro-branchement des Jours 13 à 28 ; `outbox_messages` | Jour 9 | Q-52 |
@@ -205,7 +205,7 @@ La réponse à Q-93 propose 15 étapes. Elles suivent, à quelques points près,
 | SQ-03 | L'action Respond du Jour 21 crée une quotation, alors que `quotations` est construit au Jour 24 (étape 9). | Au Jour 21 : Decline et Ask Question seulement ; Respond est livré au Jour 24 avec le modèle de quotation. Alternative : un brouillon de quotation sans prix au Jour 21. | **À VALIDER avant le Jour 21** |
 | SQ-04 | L'étape 11 cite les « références », mais les références `RFQ-` sont nécessaires au Jour 19. | Générateur de références dans le socle (`common`), livré au Jour 19 pour `RFQ-`, réutilisé pour `MSQ-` (Jour 24) et `MST-` (Jour 27). | Proposé |
 | SQ-05 | Le calcul des prix (étape 9, Jour 24) dépend du modèle commercial, placé à l'étape 12. | Le modèle commercial (Q-01) et les règles de prix (Q-02, Q-03) doivent être tranchés **avant** le Jour 24 ; la structure du Trade (Q-82), avant le Jour 27. Le Jour 24 ne peut figer que des prix calculés selon un modèle validé. | **À VALIDER avant le Jour 24** |
-| SQ-06 | L'acceptation (Jour 27) écrit un TradeEvent (module-boundaries §8), mais la timeline est prévue au Jour 28. | Créer `trade_events` au Jour 27 avec l'événement de création ; le Jour 28 ajoute les transitions et la timeline. | Proposé |
+| SQ-06 | L'acceptation (Jour 27) écrit un TradeEvent (module-boundaries §8), mais la timeline est prévue au Jour 28. | Créer `trade_events` au Jour 27 avec l'événement de création ; le Jour 28 ajoute les transitions et la timeline. La colonne `document_id` suit SQ-02 : présente dès le Jour 27 si le noyau documentaire existe, sinon ajoutée au Jour 29. | Proposé |
 
 ## 7. Journal des changements de séquence
 

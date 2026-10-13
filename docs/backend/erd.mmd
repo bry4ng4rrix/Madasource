@@ -135,7 +135,9 @@ erDiagram
     platform_role_assignments {
         uuid id PK
         uuid user_id FK "-> users"
-        uuid role_id FK "-> roles"
+        uuid role_id FK "-> roles (composite avec role_scope)"
+        varchar role_scope "PLATFORM"
+        boolean is_bootstrap
         timestamptz revoked_at
     }
     roles ||--o{ role_permissions : "accorde"

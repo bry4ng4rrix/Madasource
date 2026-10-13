@@ -202,7 +202,7 @@ Une liste de clés interdites ne voit pas une convention `SALE` servie à l'expo
 
 Les sentinelles couvrent aussi les **identifiants** tant que Q-27 est ouvert : l'identifiant de l'organisation acheteuse et ceux de ses utilisateurs reçoivent des UUID sentinelles, recherchés dans toute réponse servie à un exportateur. Ils peuvent en effet circuler sous d'autres clés que `buyer_organization_id` : `conversation_participants.organization_id`, `messages.author_organization_id`, `documents.owner_organization_id`, colonnes `*_by_user_id`. L'identité d'un acteur est rendue selon S-48, jamais par son identifiant brut.
 
-Tests prévus : `test_buyer_identifiers_absent_from_exporter_responses`, `test_sentinel_sale_amount_absent_from_exporter_responses`, `test_sentinel_supply_amount_absent_from_buyer_responses`, `test_supply_event_cannot_be_buyer_visible`, `test_model_a_negotiation_conversation_never_has_both_parties`.
+Tests prévus : `test_buyer_identifiers_absent_from_exporter_responses`, `test_sentinel_sale_amount_absent_from_exporter_responses`, `test_sentinel_supply_amount_absent_from_buyer_responses`, `test_supply_event_cannot_be_buyer_visible` ; `test_model_a_negotiation_conversation_never_has_both_parties`, seulement si Q-99 retient les canaux séparés.
 
 ### 3.9 Utilisateur membre de plusieurs organisations
 

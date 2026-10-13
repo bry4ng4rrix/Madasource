@@ -23,7 +23,7 @@ En cours de journée, le responsable produit a transmis des réponses à 11 ques
 
 - Livrables des Jours 1 et 2 présents ; `check.md` : Jour 2 OK.
 - Le cahier des charges a été réextrait du PDF versionné pour vérifier les points contestés (§28, format des références).
-- L'utilisateur a fait trois commits pendant la journée (`0c1bf4f`, `8f4619d`, `bb8a36a`), qui poussent les livrables en cours. L'arbre de travail était identique à ces commits : aucune modification de l'utilisateur n'a été écrasée.
+- L'utilisateur a fait quatre commits pendant la journée (`0c1bf4f`, `8f4619d`, `bb8a36a`, `66a95bc`), qui poussent les livrables en cours. L'arbre de travail était identique à ces commits : aucune modification de l'utilisateur n'a été écrasée. Les dernières corrections (section « Vérification finale ») ne sont pas encore commitées.
 
 ## Fichiers
 
@@ -60,7 +60,7 @@ En cours de journée, le responsable produit a transmis des réponses à 11 ques
 | 3. **Relecture base de données** (agent `database-reviewer`) | 0 bloquant, 10 importants, 13 mineurs. Principaux : clés composites incomplètes sur la chaîne d'acceptation, séparation des tâches contournable sur les coordonnées bancaires, prise d'effet différée incompatible avec l'index unique, compte bénéficiaire non tracé, droits par colonne, ligne de RFQ bloquée après annulation, effacement des textes immuables, ordre de verrouillage, évolution des `CHECK` ignorée par Alembic. Tous traités |
 | 4. **Relecture sécurité** (agent `security-auditor`) | 0 critique, 4 élevés, 11 moyens, 5 faibles. Élevés : fil de messages commun en Modèle A ; visibilité non bornée par la convention ; montants de même nom dans les deux conventions ; utilisateur membre des deux parties. Tous traités ; le premier a ouvert un conflit avec le CdC (CF-10, Q-99) |
 | 5. **Revue finale** (skill `code-review-madasource`) | Verdict avant corrections : non prêt. 1 bloquant (CF-10 non signalé), 9 importants, 9 facultatifs. Tous traités |
-| 6. **Vérification ciblée des corrections** (agent `code-reviewer`) | Voir la section « Vérification finale » |
+| 6. **Vérification ciblée des corrections** (agent `code-reviewer`) | Verdict : prêt avec réserves. 9 points sur 10 corrects, 1 partiel, 0 bloquant, 1 important, 8 mineurs. Tous corrigés (section suivante) |
 
 ## Choix structurants proposés
 
@@ -95,7 +95,24 @@ Non exécuté : rendu Mermaid de l'ERD (aucun outil `mmdc` installé, aucune ins
 
 ## Vérification finale
 
-À compléter avec le résultat de la vérification ciblée.
+La vérification ciblée a confirmé :
+- la correction des points de la revue finale, dont le bloquant (CF-10 et Q-99 signalés, REQ-MSG-01 annoté) ;
+- la disparition des colonnes retirées dans toute la documentation ;
+- la cohérence des colonnes ajoutées entre `data-model.md`, `erd.mmd` et `indexes-and-constraints.md`.
+
+Constats restants, tous corrigés ensuite :
+- **important** : `trade_events.document_id` exige le module `documents` dès le Jour 27. Le prérequis est déplacé au Jour 27, avec une migration additive au Jour 29 si SQ-02 diffère les documents ;
+- **mineurs** :
+  - index de `verification_records` aligné sur le nouveau calcul du statut ;
+  - droits par colonne de `platform_role_assignments` ;
+  - Q-101 corrigée : seuls les comptes de réception et la confirmation des paiements sont bloqués avec un admin unique ;
+  - en-tête `X-Organization-Id` relié à Q-100 ;
+  - invariant de `trade_items` aligné sur l'index partiel ;
+  - ERD de `platform_role_assignments` complété ;
+  - lien `confirms_external_cost_id` entre une confirmation de coût et son estimation ;
+  - test des canaux de conversation conditionné à Q-99.
+
+Après ces corrections, les contrôles automatiques (références, ERD, tableaux) sont de nouveau à 0 erreur. Elles n'ont pas fait l'objet d'une troisième revue par un agent.
 
 ## Critères de sortie
 

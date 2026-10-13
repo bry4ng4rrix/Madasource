@@ -218,7 +218,7 @@ Format : question — contexte — jour bloqué ou influencé.
 - **Q-63** — Favoris, recherche globale et agrégations des tableaux de bord Buyer et Exporter : V1 ou plus tard ? — CdC §48-51 — J13 à J35.
 - **Q-64** — Module admin « Partners » : désactivé en V1 ? — CdC §34 — J35.
 - **Q-89** — (J2) En V1, tous les admins voient-ils marges, données bancaires, documents privés et conversations, ou faut-il répartir les ensembles de permissions admin entre plusieurs personnes ? — CdC §53 ; S-12 — J9.
-- **Q-101** — (J3) Combien d'administrateurs humains en V1 ? La séparation des tâches (confirmation des paiements, vérification des comptes de réception et des coordonnées bancaires) exige au moins deux personnes ; avec une seule, la base bloque ces opérations (R-32). — CdC §30, §53 ; S-34, S-44 — J9, J33.
+- **Q-101** — (J3) Combien d'administrateurs humains en V1 ? La séparation des tâches exige au moins deux personnes pour vérifier un compte de réception de MadaSource et pour confirmer un paiement ; avec une seule, la base bloque ces opérations (R-32). Les coordonnées bancaires d'un exportateur, créées par l'exportateur, restent vérifiables par un admin unique. — CdC §30, §53 ; S-34, S-44 — J9, J33.
 
 ### 4.17 Transverse
 
