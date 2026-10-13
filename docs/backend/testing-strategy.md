@@ -37,8 +37,8 @@ Dépendances de développement à justifier et épingler au Jour 4.
 | Besoin | Outil proposé | Justification |
 |---|---|---|
 | Lanceur | `pytest` | Imposé par la stack (RJ section 1) |
-| Tests asynchrones | Plugin pytest d'AnyIO (backend asyncio seul), ou `pytest-asyncio` | AnyIO est déjà une dépendance de Starlette et FastAPI : pas de paquet supplémentaire. Choix au Jour 4. |
-| Client HTTP de test | `httpx` (`AsyncClient` et transport ASGI) | Appelle l'application en mémoire, sans serveur. Le transport ASGI de httpx **n'exécute pas** le cycle de démarrage et d'arrêt (lifespan) : les fixtures le déclenchent explicitement. |
+| Tests asynchrones | **Plugin pytest d'AnyIO** (backend asyncio seul), retenu au Jour 5 | AnyIO est déjà une dépendance de Starlette et FastAPI : pas de paquet supplémentaire |
+| Client HTTP de test | `httpx2` (Jour 4) : Starlette 1.7 rend `httpx` obsolète pour son `TestClient`, voir `backend/README.md`. `TestClient`, ou `AsyncClient` et transport ASGI | Appelle l'application en mémoire, sans serveur. Le transport ASGI de httpx **n'exécute pas** le cycle de démarrage et d'arrêt (lifespan) : les fixtures le déclenchent explicitement. |
 | Couverture | `pytest-cov` | Mesure et rapport en CI |
 | Données de test | Fonctions de fabrication écrites dans le projet (pas de bibliothèque) | Pas de dépendance ; données explicites |
 | Temps | Horloge injectable (D-13), sans bibliothèque de gel du temps | Dates contrôlées sans modifier l'horloge du système |

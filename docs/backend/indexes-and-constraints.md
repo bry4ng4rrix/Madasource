@@ -229,7 +229,7 @@ Pas d'index sur `quotation_versions.expires_at` : il couvrirait toutes les versi
 | `madasource_migrator` | Propriétaire du schéma, DDL | Alembic seulement |
 | `madasource_app` | DML sur les tables, sans DDL, sans droit de propriétaire | Application (API, tâches) |
 
-Les noms de rôles sont des propositions ; ils seront fixés au Jour 4 ou au Jour 6. Aucun rôle superutilisateur n'est utilisé par l'application.
+Les noms de rôles sont des propositions ; ils seront fixés au Jour 6 (reporté depuis le Jour 4). Aucun rôle superutilisateur n'est utilisé par l'application.
 
 ### 6.2 Droits de `madasource_app`
 
@@ -304,6 +304,6 @@ Compteurs : `failed_login_count` est incrémenté par une instruction atomique (
 | Canaux de messagerie en Modèle A (conflit avec le CdC §28) | Q-99, CF-10 |
 | Compte admin titulaire d'une adhésion cliente | Q-100 |
 | Nombre minimal d'administrateurs (séparation des tâches) | Q-101, R-32 |
-| Noms des rôles PostgreSQL | Jours 4 et 6 |
-| Version de PostgreSQL | D-15 (Jour 4) ; ce document n'utilise rien au-delà de PostgreSQL 13 |
+| Noms des rôles PostgreSQL | Jour 6 |
+| Version de PostgreSQL | Tranché : PostgreSQL 18 (D-27, Jour 4) ; ce document n'utilise rien au-delà de PostgreSQL 13 |
 | Toutes les contraintes du Trade | Q-82 |

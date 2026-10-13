@@ -1,0 +1,176 @@
+"""Format Problem Details de toutes les erreurs (error-handling.md §10)."""
+
+from collections.abc import Iterator
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.exc import DBAPIError
+
+from app.core import exceptions
+from tests.support import ALLOWED_ORIGIN
+
+pytestmark = pytest.mark.api
+
+PROBLEM_JSON = "application/problem+json"
+
+
+class _Credentials(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    password: str = Field(min_length=12)
+
+
+class _DriverError(Exception):
+    def __init__(self, sqlstate: str) -> None:
+        super().__init__("driver error with internal detail")
+        self.sqlstate = sqlstate
+
+
+@pytest.fixture
+def error_client(app: FastAPI) -> Iterator[TestClient]:
+    """Application réelle, plus des routes de test qui lèvent chaque type d'erreur."""
+
+    async def validate(credentials: _Credentials) -> dict[str, str]:
+        return {"status": "ok"}
+
+    async def raise_app_error(name: str) -> None:
+        raise getattr(exceptions, name)("Explanation without sensitive data.")
+
+    async def raise_database_error(sqlstate: str) -> None:
+        raise DBAPIError("SELECT secret_column FROM t", None, _DriverError(sqlstate))
+
+    async def raise_unexpected() -> None:
+        raise RuntimeError("internal detail: /srv/app/secret.py password=hunter2")
+
+    app.add_api_route("/api/v1/_test/validate", validate, methods=["POST"])
+    app.add_api_route("/api/v1/_test/app-error/{name}", raise_app_error, methods=["GET"])
+    app.add_api_route("/api/v1/_test/db-error/{sqlstate}", raise_database_error, methods=["GET"])
+    app.add_api_route("/api/v1/_test/boom", raise_unexpected, methods=["GET"])
+    with TestClient(app, raise_server_exceptions=False) as test_client:
+        yield test_client
+
+
+def _assert_problem(response_status: int, body: dict[str, object], code: str) -> None:
+    assert body["type"] == "about:blank"
+    assert body["status"] == response_status
+    assert body["code"] == code
+
+
+def test_unknown_route_is_a_404_problem(error_client: TestClient) -> None:
+    response = error_client.get("/api/v1/does-not-exist")
+
+    assert response.status_code == 404
+    assert response.headers["content-type"] == PROBLEM_JSON
+    body = response.json()
+    _assert_problem(404, body, "RESOURCE_NOT_FOUND")
+    assert body["title"] == "Not Found"
+    assert body["request_id"] == response.headers["x-request-id"]
+
+
+def test_wrong_method_is_a_405_problem_with_allow(error_client: TestClient) -> None:
+    response = error_client.post("/api/v1/health/live")
+
+    assert response.status_code == 405
+    assert response.headers["allow"] == "GET"
+    _assert_problem(405, response.json(), "METHOD_NOT_ALLOWED")
+
+
+def test_validation_error_lists_fields_without_the_submitted_values(
+    error_client: TestClient,
+) -> None:
+    response = error_client.post(
+        "/api/v1/_test/validate", json={"password": "tiny-pw", "role": "admin"}
+    )
+
+    assert response.status_code == 422
+    assert response.headers["content-type"] == PROBLEM_JSON
+    body = response.json()
+    _assert_problem(422, body, "VALIDATION_ERROR")
+    assert {(e["field"], e["code"]) for e in body["errors"]} == {
+        ("body.password", "string_too_short"),
+        ("body.role", "extra_forbidden"),
+    }
+    assert "tiny-pw" not in response.text
+    assert "admin" not in response.text
+    assert all(set(error) == {"field", "code", "message"} for error in body["errors"])
+
+
+@pytest.mark.parametrize(
+    ("name", "status", "code"),
+    [
+        ("ValidationAppError", 422, "BUSINESS_RULE_VIOLATION"),
+        ("BadRequestError", 400, "BAD_REQUEST"),
+        ("AuthenticationError", 401, "AUTHENTICATION_REQUIRED"),
+        ("PermissionDeniedError", 403, "PERMISSION_DENIED"),
+        ("NotFoundError", 404, "RESOURCE_NOT_FOUND"),
+        ("ConflictError", 409, "CONFLICT"),
+        ("InvalidStateTransitionError", 409, "INVALID_STATE_TRANSITION"),
+        ("ConcurrentModificationError", 409, "CONCURRENT_MODIFICATION"),
+        ("RateLimitedError", 429, "RATE_LIMITED"),
+        ("ServiceUnavailableError", 503, "SERVICE_UNAVAILABLE"),
+    ],
+)
+def test_app_errors_become_problems(
+    error_client: TestClient, name: str, status: int, code: str
+) -> None:
+    response = error_client.get(f"/api/v1/_test/app-error/{name}")
+
+    assert response.status_code == status
+    assert response.headers["content-type"] == PROBLEM_JSON
+    body = response.json()
+    _assert_problem(status, body, code)
+    assert body["detail"] == "Explanation without sensitive data."
+
+
+def test_authentication_error_has_www_authenticate(error_client: TestClient) -> None:
+    response = error_client.get("/api/v1/_test/app-error/AuthenticationError")
+
+    assert response.headers["www-authenticate"] == "Bearer"
+
+
+@pytest.mark.parametrize(
+    ("sqlstate", "status", "code"),
+    [
+        ("40P01", 409, "CONCURRENT_MODIFICATION"),
+        ("40001", 409, "CONCURRENT_MODIFICATION"),
+        ("55P03", 409, "CONCURRENT_MODIFICATION"),
+        ("57014", 503, "SERVICE_UNAVAILABLE"),
+        ("08006", 503, "SERVICE_UNAVAILABLE"),
+        ("23505", 500, "INTERNAL_ERROR"),
+    ],
+)
+def test_database_errors_are_translated(
+    error_client: TestClient, sqlstate: str, status: int, code: str
+) -> None:
+    response = error_client.get(f"/api/v1/_test/db-error/{sqlstate}")
+
+    assert response.status_code == status
+    _assert_problem(status, response.json(), code)
+    for fragment in ("secret_column", "SELECT", "internal detail", sqlstate):
+        assert fragment not in response.text
+
+
+def test_unexpected_error_is_a_generic_500_with_request_id_and_cors(
+    error_client: TestClient,
+) -> None:
+    response = error_client.get("/api/v1/_test/boom", headers={"Origin": ALLOWED_ORIGIN})
+
+    assert response.status_code == 500
+    assert response.headers["content-type"] == PROBLEM_JSON
+    body = response.json()
+    _assert_problem(500, body, "INTERNAL_ERROR")
+    assert body["detail"] == "An unexpected error occurred."
+    assert body["request_id"] == response.headers["x-request-id"]
+    assert response.headers["access-control-allow-origin"] == ALLOWED_ORIGIN
+    assert response.headers["x-content-type-options"] == "nosniff"
+    for fragment in ("hunter2", "secret.py", "RuntimeError", "Traceback"):
+        assert fragment not in response.text
+
+
+def test_unexpected_error_has_no_cors_header_for_unknown_origin(error_client: TestClient) -> None:
+    response = error_client.get("/api/v1/_test/boom", headers={"Origin": "https://evil.example"})
+
+    assert response.status_code == 500
+    assert "access-control-allow-origin" not in response.headers

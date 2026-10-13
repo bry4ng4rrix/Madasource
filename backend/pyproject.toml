@@ -13,6 +13,7 @@ dependencies = [
     "sqlalchemy[asyncio]==2.1.4",
     "asyncpg==0.32.0",
     "alembic==1.20.0",
+    "pydantic-settings==2.15.0",
 ]
 
 [dependency-groups]
@@ -72,3 +73,8 @@ pythonpath = ["."]
 addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
 xfail_strict = true
 filterwarnings = ["error"]
+markers = [
+    "unit: logique pure, sans base ni HTTP",
+    "api: endpoints, par le client HTTP en mémoire",
+    "integration: exige la base de test (docker compose --profile test up -d db-test)",
+]

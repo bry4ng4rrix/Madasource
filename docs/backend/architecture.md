@@ -14,7 +14,7 @@ Documents liés :
 Spécification fonctionnelle : documents du Jour 1 ([requirements.md](requirements.md), [business-rules.md](business-rules.md), [workflows.md](workflows.md)).
 
 Chaque décision porte un identifiant **D-NN** et un statut :
-- **Retenu** : imposé par une source (CdC, roadmap) ;
+- **Retenu** : imposé par une source (CdC, roadmap) ou choisi explicitement par l'utilisateur (date indiquée) ;
 - **Proposé** : proposition argumentée de l'équipe, à confirmer avant implémentation. « Proposé (Q-NN) » signifie que la proposition attend la réponse du client à la question Q-NN ;
 - **À VALIDER** : aucune proposition n'est retenue, la décision revient au client ou à un jour ultérieur.
 
@@ -329,7 +329,7 @@ Le CdC §77 (point 2) demande une recommandation de stack. La roadmap l'impose (
 | Alembic | Retenu | Migrations versionnées, relues, réversibles |
 | Pytest | Retenu | Fixtures adaptées aux bases de test isolées et aux tests paramétrés (machines d'état) |
 | Ruff | Retenu | Lint et formatage rapides, un seul outil |
-| mypy | Retenu (Jour 4) | Vérification de types en mode strict, avec le greffon Pydantic ; SQLAlchemy 2 est typé nativement |
+| mypy | Proposé (Jour 4), à confirmer | Vérification de types en mode strict, avec le greffon Pydantic ; SQLAlchemy 2 est typé nativement |
 | Docker Compose | Retenu | Environnement reproductible (backend et PostgreSQL), aligné avec la CI |
 | uv | Retenu (Jour 4, version 0.13.0 imposée par `required-version`) | Verrouillage reproductible des dépendances (`uv.lock`) ; gestion des versions de Python |
 | Redis, Celery | Non retenus au départ (D-20) | À introduire seulement si un besoin est démontré (Jour 31, limites de débit partagées au Jour 8) |

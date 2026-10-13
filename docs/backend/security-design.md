@@ -241,8 +241,8 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 | Règle | Statut |
 |---|---|
 | Secrets uniquement dans les variables d'environnement ou le gestionnaire de secrets de l'hébergeur (Q-79). Jamais dans Git, une image Docker, un journal ou la configuration CI en clair. | Retenu (RJ section 1) |
-| Le `.gitignore` de l'utilisateur (depuis le commit 182c6c9) **ne couvre pas `.env`** ni les environnements virtuels (R-20) : à compléter avant tout `.env`, au plus tard au Jour 4. | Proposé |
-| Le cahier des charges est versionné et poussé sur le dépôt distant. `CLAUDE.md`, `roadmap.md` et `roadmap_backend_fastapi.md` ont été retirés de l'index le 2026-10-12 (commit f598049), mais ils restent dans l'**historique** poussé (commit c6e27d8). Vérifier que ce dépôt est **privé** (R-26, Q-71). Retirer des fichiers de l'historique serait une opération destructive : seulement avec l'accord explicite de l'utilisateur, et sans effet sur les clones existants. | À VALIDER |
+| `.gitignore` : `.env`, `.env.*` (sauf `.env.example`), environnements virtuels et `.claude/settings.local.json` exclus depuis le Jour 4 (R-20 clos). Contrôle « aucun `.env` suivi » en CI au Jour 7. | Retenu (Jour 4) |
+| Le cahier des charges est versionné et poussé sur le dépôt distant. `CLAUDE.md`, `roadmap.md` et `roadmap_backend_fastapi.md` ont été retirés de l'index le 2026-10-12 (commit f598049), mais ils restent dans l'**historique** poussé (commit c6e27d8). **Dépôt constaté public le 2026-10-13** : passage en privé requis, par l'utilisateur (R-26, Q-71). Retirer des fichiers de l'historique serait une opération destructive : seulement avec l'accord explicite de l'utilisateur, et sans effet sur les clones existants. | À VALIDER |
 | Procédure de rotation documentée (Audit D). Une rotation de la clé de signature invalide les jetons en cours ; la rotation de la clé de chiffrement bancaire impose un rechiffrement (Q-81). | Proposé |
 | Détection de secrets : hook local (`guard_files.py`) et analyse en CI (outil à justifier au Jour 7). Contrôle CI : aucun `.env` suivi. | Proposé |
 

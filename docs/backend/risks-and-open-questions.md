@@ -1,6 +1,6 @@
 # Risques, contradictions et questions ouvertes — MadaSource
 
-Jour 1 · 2026-10-12 · Statut : à revoir avec le client · **Mis à jour au Jour 2** : risques R-26 à R-31, contradictions SRC-16 à SRC-19, questions Q-78 à Q-93 (marquées « (J2) ») · **Mis à jour au Jour 3** (2026-10-13) : réponses PROPOSED annotées, risque R-32, questions Q-94 à Q-101 (marquées « (J3) »)
+Jour 1 · 2026-10-12 · Statut : à revoir avec le client · **Mis à jour au Jour 2** : risques R-26 à R-31, contradictions SRC-16 à SRC-19, questions Q-78 à Q-93 (marquées « (J2) ») · **Mis à jour au Jour 3** (2026-10-13) : réponses PROPOSED annotées, risque R-32, questions Q-94 à Q-101 (marquées « (J3) ») · **Mis à jour au Jour 4** : R-20 clos, R-26 et Q-71 (dépôt public), SRC-13
 
 Ce document est le point d'entrée des décisions `À VALIDER`. Chaque question indique le jour de la roadmap backend qu'elle bloque ou influence. Une question tranchée est déplacée en section 5 avec la décision et sa date, jamais supprimée.
 
@@ -71,7 +71,7 @@ Détail complet : [v1-scope.md §3](v1-scope.md#3-matrice-de-périmètre).
 | SRC-10 | CdC §63 et Planning §4 (« rapports ») vs roadmap backend | Analytique et rapports admin attendus, sans jour backend dédié. | Q-62. |
 | SRC-11 | CdC §50-51, §48-49 vs roadmap backend | Recherche globale, favoris et tableaux de bord décrits, non planifiés. | Classés D (Q-63). |
 | SRC-12 | `roadmap.md` (50 j, Jour 1 → `docs/*.md`) vs `roadmap_backend_fastapi.md` (35 j, Jour 1 → `docs/backend/*.md`) | Deux plannings et deux jeux de livrables. | La roadmap backend est la référence (CLAUDE.md). Les livrables du Jour 1 full-stack sont couverts : roles-permissions → actors-and-permissions, domain-map → requirements §6, future-scope → v1-scope. |
-| SRC-13 | RJ, prompt quotidien (`docs/backend/roadmap-backend-fastapi.md`) vs fichier réel (`roadmap_backend_fastapi.md`, racine) | Chemin de la roadmap. | Fichier non déplacé ; déplacement à décider au Jour 4. |
+| SRC-13 | RJ, prompt quotidien (`docs/backend/roadmap-backend-fastapi.md`) vs fichier réel (`roadmap_backend_fastapi.md`, racine) | Chemin de la roadmap. | **Jour 4** : fichier non déplacé. Il reste à la racine, comme fichier local exclu de Git par l'utilisateur ; les prompts du jour renvoient au fichier réel. |
 | SRC-14 | CdC §20 (seule la contre-offre de l'acheteur est notifiée, §29) vs alternance des contre-offres | Le CdC ne liste pas la notification d'une contre-offre de l'exportateur. | Notification proposée (workflows.md §16, Q-52). |
 | SRC-15 | CdC §2 (USD 40 → USD 43) vs CdC §17 (USD 40 → USD 45 avec coûts) | Deux exemples chiffrés différents. | Pas une contradiction : exemples illustratifs, aucune valeur codée. |
 | SRC-16 | CdC §14 vs CdC §43 et §69 (et Planning §10) | Le §14 cite la performance historique et le taux de réponse parmi les critères de matching. Le §43 dit que les indicateurs de performance « should contribute to future matching », et le §69 place « Advanced Matching » en Phase 4 (Planning §10 : « matching avancé » plus tard). | Non tranché : Q-32. |
@@ -228,7 +228,7 @@ Format : question — contexte — jour bloqué ou influencé.
 - **Q-68** — Conformité des données personnelles (RGPD pour les acheteurs européens, loi malgache) : base légale, conservation, droit à l'effacement face à l'audit immuable. — CdC §60-61 — J3, J12. **Réponse reçue le 2026-10-13 : PROPOSED, non approuvée** ([registre des décisions](../decisions/architecture-decisions.md)).
 - **Q-69** — Durée de conservation des journaux d'audit, documents, messages. — CdC §52 — J12, J29.
 - **Q-70** — Fuseau de référence pour les échéances exprimées en jours (UTC, Madagascar, fuseau de l'acheteur). — CdC §18 — J25.
-- **Q-71** — **Jour 4 : dépôt constaté public le 2026-10-13.** Mise à jour au Jour 2 : le cahier des charges a été versionné et poussé sur le dépôt distant le 2026-10-12 (commit c6e27d8). À confirmer **en urgence** : le dépôt est-il privé, et ce document client peut-il y rester ? Même question pour `CLAUDE.md` et les deux roadmaps, retirés de l'index mais présents dans l'historique poussé. — R-26 — immédiat.
+- **Q-71** — **Le dépôt est public (constaté le 2026-10-13, Jour 4).** Faut-il le passer en privé ? Le cahier des charges, et l'historique contenant `CLAUDE.md` et les deux roadmaps (commit c6e27d8), peuvent-ils rester exposés ? Retirer un fichier de l'historique est une opération destructive, à faire seulement avec ton accord explicite. — R-26 — immédiat.
 - **Q-72** — Exigences non fonctionnelles chiffrées : nombre d'utilisateurs et de transactions, temps de réponse, disponibilité, RPO/RTO des sauvegardes. — CdC §60 — J2, Audit C.
 - **Q-73** — Version de référence des Incoterms (Incoterms® 2020 ?). — CdC §32 — J24.
 - **Q-75** — Feature flags, mode DEMO, i18n et séparation des taux de change ne sont prévus par aucun jour de la roadmap backend (SRC-18). Retenir les jours proposés dans v1-scope.md (Jours 2 à 5), ou ajouter des jours au planning ? — CdC §58-59, §68, §71 — J2.
@@ -248,7 +248,7 @@ Format : question — contexte — jour bloqué ou influencé.
 | Immédiat | **Q-71** (confidentialité du dépôt distant) |
 | J2-J3 (architecture, données) | Q-09, Q-10, Q-12, Q-25, Q-37, Q-66, Q-67, Q-68, Q-74, Q-82 : **réponses reçues le 2026-10-13, PROPOSED**, à approuver ([registre des décisions](../decisions/architecture-decisions.md)). Reste ouverte : Q-75. |
 | Avant J9 (planification) | Q-93 : réponse PROPOSED reçue ; point non résolu CF-08 / SQ-02, à trancher **avant J14** ([dependency-graph.md](dependency-graph.md)) |
-| J4 (initialisation du dépôt) | Q-79 |
+| J4 (initialisation du dépôt) | Q-79 : sans effet sur le Jour 4 (aucun déploiement), reportée à l'Audit D |
 | J8-J15 (sécurité, accès, comptes, vérification) | Q-11, Q-13, Q-14, Q-15, Q-16, Q-76, Q-80, Q-81, Q-87, Q-89, Q-90, Q-96, Q-97, Q-98, Q-100, Q-101 ; approbation de Q-09, Q-10, Q-12, Q-74 ; SQ-01, **SQ-02** |
 | J16-J18 (produits, marketplace) | Q-06, Q-17, Q-18, Q-19, Q-20, Q-21, Q-77, Q-78, Q-86 |
 | J19-J23 (RFQ, matching) | Q-22, Q-23, Q-24, Q-27, Q-30, Q-31, Q-32, Q-84, Q-85, Q-95 ; approbation de Q-25, Q-37 ; **SQ-03** (avant J21), SQ-04 |

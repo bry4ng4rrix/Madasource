@@ -1,26 +1,37 @@
-"""Test smoke : l'application démarre et la sonde de vivacité répond."""
+"""Sondes de santé, sans base disponible."""
 
+import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
+pytestmark = pytest.mark.api
 
 
-def test_health_live_returns_ok() -> None:
-    with TestClient(app) as client:
-        response = client.get("/api/v1/health/live")
+def test_live_returns_ok(client: TestClient) -> None:
+    response = client.get("/api/v1/health/live")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
-def test_health_live_is_documented_in_openapi() -> None:
-    with TestClient(app) as client:
-        schema = client.get("/api/v1/openapi.json").json()
+def test_ready_returns_503_problem_when_database_is_unreachable(client: TestClient) -> None:
+    response = client.get("/api/v1/health/ready")
 
-    assert "/api/v1/health/live" in schema["paths"]
+    assert response.status_code == 503
+    assert response.headers["content-type"] == "application/problem+json"
+    assert response.headers["retry-after"] == "5"
+    body = response.json()
+    assert body == {
+        "type": "about:blank",
+        "title": "Service Unavailable",
+        "status": 503,
+        "detail": "The database is not available.",
+        "code": "SERVICE_UNAVAILABLE",
+        "request_id": response.headers["x-request-id"],
+    }
 
 
-def test_openapi_is_not_served_outside_api_prefix() -> None:
-    with TestClient(app) as client:
-        assert client.get("/openapi.json").status_code == 404
-        assert client.get("/docs").status_code == 404
+def test_ready_failure_does_not_reveal_connection_details(client: TestClient) -> None:
+    text = client.get("/api/v1/health/ready").text
+
+    for fragment in ("127.0.0.1", "unreachable", "unused", "asyncpg", "Errno"):
+        assert fragment not in text

@@ -141,9 +141,9 @@ Pour chaque jour : tables créées (d'après le modèle de données), prérequis
 
 | Jour | Module(s), tables | Prérequis | Questions |
 |---|---|---|---|
-| 4 | Squelette du dépôt, socle | Jours 1 à 3 validés ; `.gitignore` complété (`.env`, environnements virtuels) | **Q-71** (visibilité du dépôt) ; D-15, D-27 |
+| 4 | Squelette du dépôt, socle | Jours 1 à 3 validés ; `.gitignore` complété (`.env`, environnements virtuels) | **Q-71** (dépôt constaté public : action de l'utilisateur, réserve du Jour 4) ; D-27 et D-10 tranchés au Jour 4, D-15 proposé |
 | 5 | `core`, `common` ; erreurs | Jour 4 | — |
-| 6 | `db` : convention de nommage, rôles PostgreSQL (indexes-and-constraints §1 et §6) | Jours 4 et 5 | D-10 (pilote), version de PostgreSQL |
+| 6 | `db` : convention de nommage, rôles PostgreSQL (indexes-and-constraints §1 et §6) | Jours 4 et 5 | Pilote (asyncpg) et PostgreSQL 18 tranchés au Jour 4 ; noms des rôles PostgreSQL |
 | 7 | Qualité, CI, test d'architecture (D-07) | Jours 4 à 6 | — |
 | 8 | Primitives de sécurité (hachage, jetons) | Jour 5 | — |
 | 9 | `users` (noyau), `organizations`, `organization_capabilities`, `organization_memberships`, `organization_invitations`, `roles`, `permissions`, `role_permissions`, `platform_role_assignments` | Jours 6 et 8 | Q-09, Q-10, Q-74 (PROPOSED, à approuver) ; Q-89, Q-98 |

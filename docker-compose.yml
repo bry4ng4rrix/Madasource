@@ -1,4 +1,5 @@
-# Environnement local de développement : PostgreSQL et backend.
+# Environnement local de développement : PostgreSQL et backend ; base de test éphémère
+# (profil « test »).
 # Variables : .env à la racine (copie de .env.example, jamais versionnée).
 # Arrêt : `docker compose down` ; ne jamais ajouter -v (supprimerait les données).
 name: madasource
@@ -31,6 +32,8 @@ services:
       context: ./backend
     environment:
       APP_ENV: ${APP_ENV:-local}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
       # Le mot de passe doit être compatible avec une URL (voir .env.example).
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@db:5432/${POSTGRES_DB:?}
     depends_on:
@@ -49,6 +52,27 @@ services:
       retries: 5
       start_period: 10s
     restart: unless-stopped
+
+  # Base de test éphémère (testing-strategy.md §4) : données en mémoire (tmpfs), vides à
+  # chaque démarrage ; jamais la base de développement. Démarrage :
+  # `docker compose --profile test up -d db-test`.
+  db-test:
+    image: postgres:18.6-trixie
+    profiles: ["test"]
+    environment:
+      POSTGRES_DB: madasource_test
+      POSTGRES_USER: madasource_test
+      POSTGRES_PASSWORD: ${POSTGRES_TEST_PASSWORD:?POSTGRES_TEST_PASSWORD manquant, voir .env.example}
+    ports:
+      - "127.0.0.1:${MADASOURCE_TEST_DB_HOST_PORT:-5434}:5432"
+    tmpfs:
+      - /var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U madasource_test -d madasource_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+      start_period: 5s
 
 volumes:
   madasource_pgdata:

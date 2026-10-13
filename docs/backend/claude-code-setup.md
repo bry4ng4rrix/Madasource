@@ -98,7 +98,7 @@ Remarques :
 
 - Voir les hooks actifs et leur source : `/hooks`.
 - Tester les hooks sans rien exécuter : `python3 .claude/tests/test_hooks.py` (doit afficher `0 échec(s)`).
-- Désactiver tous les hooks pour soi seul : créer `.claude/settings.local.json` avec `{"disableAllHooks": true}`. Ce fichier est personnel et doit être ignoré par Git (à inclure dans le `.gitignore` du Jour 4).
+- Désactiver tous les hooks pour soi seul : créer `.claude/settings.local.json` avec `{"disableAllHooks": true}`. Ce fichier est personnel et ignoré par Git (`.gitignore` du dépôt, depuis le Jour 4).
 - Désactiver un seul hook : supprimer son entrée dans `.claude/settings.json`. Cette modification passe elle-même par une confirmation.
 
 ## 6. Permissions (`.claude/settings.json`)

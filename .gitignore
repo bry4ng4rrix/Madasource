@@ -20,6 +20,9 @@ __pycache__/
 .coverage
 htmlcov/
 
+# Réglages personnels de Claude Code (claude-code-setup.md)
+.claude/settings.local.json
+
 # Éditeurs et système
 .idea/
 *.swp
