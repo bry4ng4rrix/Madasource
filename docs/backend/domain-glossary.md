@@ -8,7 +8,7 @@ Le terme anglais est celui qui sera utilisé dans le code, l'API et les statuts.
 
 | Terme (code) | Français | Définition | Source |
 |---|---|---|---|
-| Organization | Organisation | Entité juridique cliente (société acheteuse ou exportatrice). Unité d'isolation des données. Proposé : une organisation interne MadaSource pour les administrateurs (Q-74). | CdC §54 |
+| Organization | Organisation | Entité juridique cliente (société acheteuse ou exportatrice). Unité d'isolation des données. Jour 2 : organisation interne MadaSource proposée pour les administrateurs ; Jour 3 : remplacée par des rôles de plateforme, sans organisation interne (Q-74, PROPOSED). Une même organisation peut acheter et exporter (Q-09, PROPOSED). | CdC §54 |
 | User | Utilisateur | Personne disposant d'un compte, membre d'une organisation. Appartenance à plusieurs organisations : Q-74. | CdC §54 |
 | Membership | Adhésion | Lien entre un utilisateur, une organisation et un rôle. | RJ 9 |
 | Organization capability (`BUYER`, `EXPORTER`) | Capacité commerciale | (J3, PROPOSED) Fonction exercée par une organisation sur la plateforme : acheteuse, exportatrice, ou les deux. Porte le statut du compte pour cette fonction. À ne pas confondre avec la capacité de production (Capacity Record). | Q-09, Q-12 |
@@ -16,7 +16,7 @@ Le terme anglais est celui qui sera utilisé dans le code, l'API et les statuts.
 | Invitation | Invitation | (J3, PROPOSED) Proposition d'adhésion envoyée par un OWNER, à usage unique, avec expiration. | Q-10 |
 | Platform role (`MADASOURCE_ADMIN`) | Rôle de plateforme | (J3, PROPOSED) Rôle d'un administrateur MadaSource, indépendant de toute organisation cliente. | Q-10, Q-74 |
 | Active organization | Organisation active | (J3, PROPOSED) Organisation dans le contexte de laquelle une requête est autorisée, pour un utilisateur membre de plusieurs organisations. | Q-74 |
-| Role | Rôle | Ensemble de permissions. V1 : Buyer, Exporter, MadaSource Admin. | CdC §53 |
+| Role | Rôle | Ensemble de permissions. V1 : Buyer, Exporter, MadaSource Admin (CdC). Jour 3, PROPOSED : Buyer et Exporter deviennent des capacités commerciales, les rôles sont OWNER, MEMBER et MADASOURCE_ADMIN (Q-10, écart de terminologie CF-03). | CdC §53 |
 | Permission | Permission | Droit élémentaire d'effectuer une action sur un type de ressource. | CdC §53 |
 | Buyer / International Buyer | Acheteur international | Organisation qui importe et achète des produits malgaches via la plateforme. | CdC §2, §10 |
 | Exporter / Malagasy Exporter | Exportateur malgache | Organisation malgache qui vend et exporte des produits via la plateforme. | CdC §2, §11 |
