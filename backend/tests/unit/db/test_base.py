@@ -3,12 +3,14 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from sqlalchemy import CheckConstraint, DateTime, Float, ForeignKey, Index, Numeric, String, Uuid
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy.schema import CreateTable
 
+from app.db import registry
 from app.db.base import NAMING_CONVENTION, Base, UUIDPrimaryKeyMixin, new_id
 from app.db.registry import import_all_models, load_metadata
 
@@ -116,3 +118,42 @@ def test_constraint_and_index_names_fit_postgresql_and_are_unique() -> None:
 
     assert all(len(name) <= 63 for name in names), [n for n in names if len(n) > 63]
     assert len(names) == len(set(names))
+
+
+def test_registry_imports_models_of_every_module(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Découverte des modèles sur un paquet fabriqué : seuls les `models.py` existants."""
+    package = tmp_path / "probe_modules"
+    for name, files in {"alpha": ["models.py"], "beta": ["service.py"]}.items():
+        (package / name).mkdir(parents=True)
+        (package / name / "__init__.py").write_text("")
+        for file in files:
+            (package / name / file).write_text("")
+    (package / "__init__.py").write_text("")
+    (package / "loose.py").write_text("")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.setattr(registry, "MODULES_PACKAGE", "probe_modules")
+
+    assert registry.import_all_models() == ["probe_modules.alpha.models"]
+
+
+def test_registry_without_modules_package(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(registry, "MODULES_PACKAGE", "probe_package_that_does_not_exist")
+
+    assert registry.import_all_models() == []
+
+
+def test_registry_does_not_hide_errors_inside_a_models_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = tmp_path / "probe_broken"
+    (package / "gamma").mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    (package / "gamma" / "__init__.py").write_text("")
+    (package / "gamma" / "models.py").write_text("import probe_missing_dependency\n")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.setattr(registry, "MODULES_PACKAGE", "probe_broken")
+
+    with pytest.raises(ModuleNotFoundError, match="probe_missing_dependency"):
+        registry.import_all_models()

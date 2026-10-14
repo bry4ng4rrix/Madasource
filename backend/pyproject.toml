@@ -22,6 +22,8 @@ dev = [
     "httpx2==2.13.1",
     "ruff==0.17.0",
     "mypy==2.4.0",
+    "import-linter==2.15",
+    "pytest-cov==7.1.0",
 ]
 
 [tool.uv]
@@ -74,6 +76,59 @@ explicit_package_bases = true
 module = ["asyncpg", "asyncpg.*"]
 ignore_missing_imports = true
 
+[tool.importlinter]
+# Frontières de l'architecture (module-boundaries.md §3 et §9), contrôlées par `lint-imports`.
+root_package = "app"
+include_external_packages = false
+
+[[tool.importlinter.contracts]]
+id = "socle"
+name = "Couches de l'application : API, modules métier, puis socle core → db → common → integrations"
+type = "layers"
+# Du plus haut au plus bas : une couche n'importe que des couches inférieures.
+# Les noms entre parenthèses sont facultatifs : contrôlés dès qu'ils existent.
+layers = [
+    "app.main",
+    "app.api",
+    "(app.modules)",
+    "(app.integrations)",
+    "(app.common)",
+    "app.db",
+    "app.core",
+]
+
+[[tool.importlinter.contracts]]
+id = "modules"
+name = "Modules métier par niveau : dépendances vers les niveaux inférieurs seulement"
+type = "layers"
+containers = ["app.modules"]
+# Niveaux de module-boundaries.md §3, du plus haut (20) au plus bas (1). « | » : modules d'un
+# même niveau, indépendants l'un de l'autre. Tous facultatifs : créés au jour de leur
+# implémentation. exhaustive : un module absent de cette liste fait échouer le contrôle.
+exhaustive = true
+layers = [
+    "(admin)",
+    "(marketplace)",
+    "(matching)",
+    "(reviews)",
+    "(exceptions)",
+    "(payment_records) | (shipments) | (samples)",
+    "(trades)",
+    "(negotiations)",
+    "(quotations)",
+    "(rfqs)",
+    "(products)",
+    "(exporters)",
+    "(buyers) | (verification)",
+    "(messages)",
+    "(documents)",
+    "(notifications)",
+    "(access_control)",
+    "(organizations)",
+    "(auth)",
+    "(audit)",
+]
+
 [tool.pytest.ini_options]
 minversion = "9.0"
 testpaths = ["tests"]
@@ -87,3 +142,13 @@ markers = [
     "api: endpoints, par le client HTTP en mémoire",
     "integration: exige la base de test (docker compose --profile test up -d db-test)",
 ]
+
+[tool.coverage.run]
+source = ["app"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+# Seuil minimal : sous ce taux, la suite échoue (97 % mesurés au Jour 7).
+fail_under = 95
