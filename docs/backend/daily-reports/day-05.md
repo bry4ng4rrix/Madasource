@@ -83,7 +83,7 @@ Choix techniques, documentés :
 | `uv run ruff check .` / `uv run ruff format --check .` | All checks passed / 28 files already formatted |
 | `uv run mypy` | Success: no issues found in 27 source files |
 | `docker compose --profile test up -d db-test` | `db-test` « healthy » ; `Mounts: []`, `tmpfs` sur `/var/lib/postgresql` |
-| `uv run --env-file ../.env.example pytest` | **143 passed** (unitaires, API et 5 tests d'intégration contre la base de test) |
+| `uv run --env-file ../.env.example pytest` | **143 passed** avant la vérification ciblée, **148 passed** après (unitaires, API et 5 tests d'intégration contre la base de test) |
 | `pytest -m integration` sans `TEST_DATABASE_URL` | Échec explicite, avec la marche à suivre (jamais ignoré) |
 | `docker compose up -d --build backend` puis `curl` | `live` 200, `ready` 200 `{"status":"ok","database":"ok"}` ; route inconnue : 404 `application/problem+json` ; `/docs` racine : 404 ; aucun en-tête `server` ; `X-Request-ID`, `Cache-Control: no-store` |
 | `docker compose stop db`, `curl …/ready`, `start db` | 503 `SERVICE_UNAVAILABLE` avec `Retry-After: 5` ; `live` reste à 200 ; `ready` revient à 200 après la relance |
@@ -95,14 +95,33 @@ Choix techniques, documentés :
 
 ## Vérification finale
 
-À compléter avec le résultat de la vérification ciblée.
+**Vérification ciblée des correctifs** (agent `security-auditor`, essais sous uvicorn réel) : E1, E2, M3, F4 à F8, `WWW-Authenticate` et D-08 corrigés ; deux points partiels ; aucun nouveau défaut élevé. Suites données le 2026-10-14 :
+
+| Constat | Traitement |
+|---|---|
+| Partiel : le schéma `ProblemDetails` du 422 et du 503 était documenté sous `application/json` | Référence au schéma placée sous `application/problem+json` ; tests renforcés |
+| Partiel : une erreur de base en 503 était journalisée en `WARNING`, sans méthode ni chemin | `ERROR` pour tout 5xx, avec méthode et chemin ; test |
+| Moyen : `alembic/env.py` analysait `DATABASE_URL` sans protection | Fonction commune `parse_database_url` ; erreur à message fixe (vérifié avec deux URL piégées) |
+| Moyen : le formateur JSON écrivait encore la trace complète d'un journal tiers (`exc_info`) | Traces résumées partout (types et pile, jamais le message) ; test |
+| Faible : `APP_ENV` avait une valeur par défaut dans Compose | Obligatoire (`${APP_ENV:?}`) |
+| Faible : paires clé-valeur non masquées ; UUID et dates illisibles | Paires traitées comme des entrées ; UUID, dates et énumérations lisibles ; `Decimal` reste masqué (prix, D-12) ; tests |
+| Faible : mot de passe contenant `@` sans port accepté (fin du mot de passe dans l'hôte) | Refusé avec le message fixe ; test |
+| Faible : origines `http://` et `DEBUG` acceptés en `staging` et `demo` | Ajouté à Q-102 |
+| Faible : message d'un validateur personnalisé qui transforme la saisie ; clés envoyées reprises dans `field` ; clés de données dans `validation_errors.loc` des journaux | Règle de rédaction des validateurs (`error-handling.md` §3) ; risque résiduel accepté et noté |
+| Faible : `Vary: Origin` absent de certaines réponses 500 en mode `*` | Négligeable (`Cache-Control: no-store`) ; noté |
+| Info : télémétrie OpenTelemetry embarquée dans FastAPI 0.143, inactive | Noté : ne jamais configurer de fournisseur sans revue (les exceptions y seraient exportées avec leur message) |
+
+Après ces suites :
+- Ruff et mypy OK ;
+- **148 tests réussis**, dont 5 d'intégration ;
+- conteneur reconstruit : `live` et `ready` à 200, 404 au format Problem Details, aucun en-tête `server`.
 
 ## Critères de sortie
 
 | Critère (roadmap §5) | État |
 |---|---|
 | Périmètre implémenté et cohérent | Oui : tous les éléments de la consigne, vérifiés en local, par les tests et en conteneur |
-| Tests appropriés et résultat connu | Oui : 143 tests, tous réussis, dont 5 contre une vraie base de test |
+| Tests appropriés et résultat connu | Oui : 148 tests, tous réussis, dont 5 contre une vraie base de test |
 | Migrations et contraintes cohérentes | Sans objet (aucune table ; Jour 6) |
 | Documentation et `.env.example` à jour | Oui |
 | Aucun secret ajouté | Oui |
@@ -127,6 +146,7 @@ Choix techniques, documentés :
 - **Compose connecte le backend avec le superutilisateur PostgreSQL** : les deux rôles (migrations, application) sont prévus au Jour 6.
 - **Journaux** : les chemins sont journalisés ; aucune route ne doit porter de jeton dans son chemin (règle à conserver). Les cadres de pile des erreurs 500 reprennent des lignes de code, jamais des valeurs.
 - **Images épinglées par étiquette, pas par condensat** (Jour 7) ; pas de TLS exigé vers la base en production (Audit D).
+- **Télémétrie de FastAPI** (OpenTelemetry, inactive) : ne jamais configurer de fournisseur sans revue de sécurité.
 
 ## Préparation du Jour 6 (non exécuté)
 
