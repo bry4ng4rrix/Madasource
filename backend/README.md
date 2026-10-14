@@ -44,13 +44,13 @@ Point d'entrée unique : `backend/Makefile`, exécuté tel quel par la CI (secti
 | Contrôles rapides | `make check` | `quality`, puis `test-fast` |
 | Base de test (avant les tests) | `docker compose --profile test up -d --wait db-test` (depuis la racine) | |
 | Tests : suite complète | `make test ENV_FILE=../.env` | `pytest --cov` : échec si la couverture de `app/` (lignes et branches) passe sous 95 % (Q-104) |
-| Migrations | `make migrations-check ENV_FILE=../.env` | `alembic upgrade head`, puis `alembic check`, sur la base de `MIGRATION_DATABASE_URL` |
-| Image Docker | `make docker-build` | `docker build`, sans envoi vers un registre, puis contrôle de l'utilisateur de l'image (`10001:10001`) |
+| Migrations (base de test) | `make migrations-check ENV_FILE=../.env` | Refus de toute base dont le nom ne finit pas par `_test`, puis `alembic upgrade head` et `alembic check` avec `TEST_MIGRATION_DATABASE_URL`. Depuis une base vide si `db-test` vient de démarrer, ce qui est toujours le cas en CI |
+| Image Docker | `make docker-build` | `docker build`, sans envoi vers un registre, puis contrôle de l'utilisateur (`10001:10001`) de l'image tout juste construite (`--iidfile`) |
 | Serveur local | `uv run --env-file ../.env uvicorn --factory app.main:create_app --reload --port 8002 --no-access-log --no-server-header` | |
 
-Chaque cible passe par `uv run --locked`, qui refuse un `uv.lock` périmé. `ENV_FILE` transmet le fichier à `uv run --env-file` ; une variable déjà présente dans l'environnement l'emporte sur le fichier (vérifié avec uv 0.13.0). Sans `ENV_FILE`, les variables viennent de l'environnement : c'est le cas en CI.
+Les cibles qui exécutent un outil Python passent par `uv run --locked`, qui refuse un `uv.lock` périmé. `ENV_FILE` transmet le fichier à `uv run --env-file` ; une variable déjà présente dans l'environnement l'emporte sur le fichier (vérifié avec uv 0.13.0). Sans `ENV_FILE`, les variables viennent de l'environnement : c'est le cas en CI.
 
-`make migrations-check ENV_FILE=../.env` applique les migrations en attente à la base de **développement** (`MIGRATION_DATABASE_URL`). Pour viser la base de test, comme la CI, définir `MIGRATION_DATABASE_URL` avec la valeur de `TEST_MIGRATION_DATABASE_URL`, par exemple sous fish : `env MIGRATION_DATABASE_URL=<URL de test> make migrations-check`.
+`make migrations-check` ne vise jamais la base de développement : celle-ci se migre par les commandes de la section « Migrations ».
 
 Points de fonctionnement :
 - **tests** : marqueurs `unit` (sans base ni HTTP), `api` (client HTTP en mémoire, sans base), `integration` (base de test). Tout avertissement est traité comme une erreur (`filterwarnings = error`). Sans `TEST_DATABASE_URL` et `TEST_MIGRATION_DATABASE_URL`, les tests d'intégration **échouent** avec la marche à suivre : ils ne sont jamais ignorés ;
@@ -60,22 +60,28 @@ Points de fonctionnement :
 
 ## Intégration continue
 
-Workflow `.github/workflows/ci.yml`, déclenché à chaque `push` et `pull_request`. Quatre jobs indépendants sur `ubuntu-24.04` :
+Workflow `.github/workflows/ci.yml`, déclenché à chaque `push` et `pull_request`. **Écrit au Jour 7 et rejoué en local job par job.** Première exécution sur GitHub le 2026-10-14 (commit `98dceb2`, version intermédiaire du workflow) : les quatre jobs ont réussi. La version corrigée après les revues du Jour 7 s'exécutera au prochain push. Quatre jobs indépendants sur `ubuntu-24.04` :
 
 | Job | Contenu |
 |---|---|
 | `quality` | `make install`, puis `make quality` |
-| `tests` | service `db-test` démarré par Docker Compose avec les valeurs factices de `.env.example` (base en mémoire, vide) ; `make migrations-check` sur cette base, depuis une base vide ; `make test` (suite complète et seuil de couverture) |
+| `tests` | service `db-test` démarré par Docker Compose avec les valeurs factices de `.env.example` (base en mémoire, vide) ; `make migrations-check` sur cette base vide ; `make test` (suite complète et seuil de couverture) |
 | `docker` | `docker compose config` (avec et sans le profil `test`) ; `make docker-build` |
-| `secrets` | aucun fichier `.env` suivi par Git ; gitleaks 8.30.1 sur tout l'historique Git, valeurs masquées (`--redact`) |
+| `secrets` | aucun fichier `.env` (`.env`, `.env.*`, `*.env`, `.envrc`, sauf `.env.example`) dans l'arbre ni dans l'historique ; aucune exception gitleaks hors de `.github/gitleaks.toml` ; gitleaks 8.30.1 : auto-test (un mot de passe aléatoire dans une URL doit être détecté), puis analyse de tout l'historique Git, valeurs masquées (`--redact`) |
 
 Garde-fous :
-- jeton GitHub en lecture seule (`permissions: contents: read`), identifiants Git non conservés après le checkout (`persist-credentials: false`), pas de déclencheur `pull_request_target` ;
+- jeton GitHub en lecture seule (`permissions: contents: read`), identifiants Git non conservés après le checkout (`persist-credentials: false`) ; jamais de déclencheur `pull_request_target`, `workflow_run` ni `issue_comment` ;
 - aucun secret GitHub n'est utilisé : la base de test est éphémère, sur le runner, avec les valeurs factices de `.env.example` ; aucune image n'est publiée, rien n'est déployé ;
 - actions tierces épinglées par empreinte de commit : `actions/checkout` v7.0.1, `astral-sh/setup-uv` v10.2.0 ; uv 0.13.0 et gitleaks 8.30.1 vérifiés par leur somme SHA-256 ; images Docker épinglées par empreinte (`Dockerfile`, `docker-compose.yml`) ;
-- délai de carence : une version publiée depuis moins de 14 jours n'est pas retenue (setup-uv v10.3.0, publiée le 2026-10-09, écartée au Jour 7 ; Q-104).
+- pas de cache de dépendances entre exécutions (`enable-cache: false`) : chaque paquet est téléchargé et vérifié par les empreintes de `uv.lock` ;
+- étapes exécutées par `bash -eo pipefail` ; une exécution n'est annulée par la suivante que sur une pull request ;
+- gitleaks : configuration explicite (`.github/gitleaks.toml` : règles par défaut et règle `url-credentials`) ; les fichiers `.gitleaksignore` et les commentaires `gitleaks:allow` sont refusés ou ignorés. Exceptions et limites : `security-design.md` §17.
 
-Mise à jour d'une version épinglée : relever l'empreinte du commit de l'étiquette (`git ls-remote https://github.com/<dépôt> refs/tags/<version>` ; pour une étiquette annotée, la ligne `^{}`) ou la somme publiée avec la release, la reporter avec la version en commentaire, puis rejouer les jobs en local (commandes ci-dessus).
+Délai de carence : au Jour 7, une **action GitHub** ou un **binaire téléchargé par la CI** publié depuis moins de 14 jours n'est pas retenu (setup-uv v10.3.0, publiée le 2026-10-09, écartée). La règle ne couvre pas encore uv ni les paquets Python : uv 0.13.0 (publié le 2026-10-09, retenu au Jour 4) et plusieurs paquets de `uv.lock` avaient moins de 14 jours à leur adoption. Extension et mécanisme à valider (Q-104 b).
+
+Ce que la CI ne fait pas encore : elle ne bloque rien. Sans règle de protection de la branche `main` sur GitHub (statuts requis), un job en échec n'empêche ni un push direct ni une fusion. Les réglages GitHub à faire par le propriétaire du dépôt sont listés en Q-104 f (`docs/backend/risks-and-open-questions.md`).
+
+Mise à jour d'une version épinglée : relever l'empreinte du commit de l'étiquette (`git ls-remote https://github.com/<dépôt> refs/tags/<version>` ; pour une étiquette annotée, la ligne `^{}`) ou la somme publiée avec la release, la reporter avec la version en commentaire, puis rejouer les jobs en local (commandes ci-dessus). La version de Python (3.14.8) est écrite à la fois dans `Dockerfile` et dans `ci.yml`.
 
 Tant que le dépôt est public (Q-71), les journaux des jobs le sont aussi : ils ne contiennent que des valeurs factices et des rapports masqués.
 
@@ -180,7 +186,7 @@ Versions épinglées exactement dans `pyproject.toml` ; dépendances transitives
 | `httpx2` (dev) | 2.13.1 | Client HTTP du `TestClient` de Starlette. Starlette 1.7 rend obsolète l'usage de `httpx` au profit de `httpx2`, publié par l'auteur de `httpx` (dépôt `pydantic/httpx2`) |
 | `ruff` (dev) | 0.17.0 | Lint et formatage (stack imposée) |
 | `mypy` (dev) | 2.4.0 | Vérification de types, en mode strict, avec le greffon Pydantic (choix de l'utilisateur, Jour 7) |
-| `import-linter` (dev) | 2.15 | Contrôle automatique des couches et des niveaux de modules (D-05, `module-boundaries.md` §9), imports indirects compris. Licence BSD-2-Clause |
+| `import-linter` (dev) | 2.15 | Contrôle automatique des couches et des niveaux de modules (D-05, `module-boundaries.md` §9), imports indirects compris. Licence BSD-2-Clause ; apporte `rich`, `markdown-it-py` et `mdurl` (affichage du rapport, dev seulement) |
 | `grimp` (dev) | 3.17 | Graphe d'imports, moteur d'import-linter, utilisé directement par le test d'architecture (interface publique des modules) : déclaré explicitement plutôt que pris comme dépendance transitive. Même auteur, licence BSD-2-Clause |
 | `pytest-cov` (dev) | 7.1.0 | Mesure de la couverture (lignes et branches) et seuil bloquant (`testing-strategy.md` §10). Licence MIT ; apporte `coverage` (Apache-2.0) |
 

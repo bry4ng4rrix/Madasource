@@ -5,6 +5,8 @@ CLAUDE.md
 # Secrets et configuration locale (seul .env.example est versionné)
 .env
 .env.*
+*.env
+.envrc
 !.env.example
 
 # Environnements Python

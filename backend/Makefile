@@ -8,6 +8,15 @@ ENV_FILE ?=
 IMAGE ?= madasource-backend:check
 UV_RUN := uv run --locked $(if $(ENV_FILE),--env-file $(ENV_FILE),)
 
+# Alembic sur la base de test seulement : propriétaire du schéma de TEST_MIGRATION_DATABASE_URL.
+ALEMBIC_TEST := $(UV_RUN) sh -c 'MIGRATION_DATABASE_URL="$$TEST_MIGRATION_DATABASE_URL" exec alembic "$$@"' alembic
+# Même garde-fou que les tests (testing-strategy.md §4) : une base dont le nom finit par _test.
+TEST_DB_GUARD := import os, sys; from app.core.config import parse_database_url; \
+	raw = os.environ.get("TEST_MIGRATION_DATABASE_URL", ""); \
+	try: name = parse_database_url(raw).database or "" if raw else ""; \
+	except ValueError: name = ""; \
+	sys.exit(None if name.endswith("_test") else "TEST_MIGRATION_DATABASE_URL doit être une URL valide vers une base dont le nom finit par _test")
+
 .PHONY: help install lock-check lint format-check types imports quality test-fast test \
 	migrations-check docker-build check
 
@@ -40,12 +49,15 @@ test-fast: ## Tests sans base (unitaires, API, architecture) ; sélection, pas l
 test: ## Suite complète avec couverture (exige la base de test et TEST_* )
 	$(UV_RUN) pytest --cov
 
-migrations-check: ## Montée vers la tête et absence d'écart (exige MIGRATION_DATABASE_URL)
-	$(UV_RUN) alembic upgrade head
-	$(UV_RUN) alembic check
+migrations-check: ## Base de test : montée vers la tête, puis absence d'écart (TEST_MIGRATION_DATABASE_URL)
+	$(UV_RUN) python -c '$(TEST_DB_GUARD)'
+	$(ALEMBIC_TEST) upgrade head
+	$(ALEMBIC_TEST) check
 
 docker-build: ## Image du backend, exécutée sans privilège (aucun envoi vers un registre)
-	docker build --tag $(IMAGE) .
-	test "$$(docker image inspect --format '{{.Config.User}}' $(IMAGE))" = "10001:10001"
+	@iid="$$(mktemp)" && trap 'rm -f "$$iid"' EXIT && \
+	docker build --iidfile "$$iid" --tag $(IMAGE) . && \
+	user="$$(docker image inspect --format '{{.Config.User}}' "$$(cat "$$iid")")" && \
+	echo "Utilisateur de l'image construite : $$user" && test "$$user" = "10001:10001"
 
 check: quality test-fast ## Contrôles rapides, sans base ni Docker

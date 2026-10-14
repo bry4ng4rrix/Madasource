@@ -21,6 +21,9 @@ set -eu
 psql -v ON_ERROR_STOP=1 --no-psqlrc --quiet \
   --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" \
   -v app_role=madasource_app <<'SQL'
+-- En cas d'erreur, psql recopierait la ligne fautive (LINE 1: … PASSWORD '…') dans sa
+-- sortie, donc dans les journaux du conteneur : seule la position est affichée.
+\set VERBOSITY terse
 \getenv app_password MADASOURCE_APP_PASSWORD
 
 -- Les instructions de cette session ne sont pas journalisées par le serveur, ni en cas

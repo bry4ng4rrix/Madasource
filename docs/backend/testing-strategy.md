@@ -47,7 +47,7 @@ Dépendances de développement à justifier et épingler au Jour 4.
 
 | Règle | Statut |
 |---|---|
-| Base dédiée, dont le nom se termine par `_test` (par exemple `madasource_test`), servie par un **PostgreSQL éphémère** : un conteneur de test dont les données vivent en mémoire (tmpfs) et repartent vides à chaque démarrage. La CI démarre le même service Compose, avec les valeurs factices de `.env.example`. Aucune base persistante n'est donc jamais supprimée ni réinitialisée par les tests (CLAUDE.md). Même version majeure de PostgreSQL qu'en production. | **Implémenté** : en local au Jour 5, en CI au Jour 7 (job `tests`, `backend/README.md`) |
+| Base dédiée, dont le nom se termine par `_test` (par exemple `madasource_test`), servie par un **PostgreSQL éphémère** : un conteneur de test dont les données vivent en mémoire (tmpfs) et repartent vides à chaque démarrage. La CI démarre le même service Compose, avec les valeurs factices de `.env.example`. Aucune base persistante n'est donc jamais supprimée ni réinitialisée par les tests (CLAUDE.md). Même version majeure de PostgreSQL qu'en production. | **Implémenté** en local (Jour 5) ; en CI, job `tests` écrit au Jour 7, rejoué en local ; première exécution sur GitHub le 2026-10-14 (commit `98dceb2`, version intermédiaire du workflow) : quatre jobs réussis ; la version corrigée après les revues s'exécutera au prochain push (`backend/README.md`) |
 | **Garde-fou** : la configuration de test refuse de démarrer si l'environnement n'est pas `test` ou si le nom de la base ne se termine pas par `_test`. Aucun test ne peut toucher la base de développement. | **Implémenté au Jour 5** : service Compose `db-test` (profil `test`, `tmpfs`, port 5434), `TEST_DATABASE_URL`, contrôle dans `Settings` |
 | Schéma créé une fois par session de tests par `alembic upgrade head` sur cette base vide, ce qui teste aussi les migrations. Jamais par `create_all`. Une réinitialisation d'une base de test persistante, si elle devenait nécessaire, serait une exception explicite à faire valider par l'utilisateur. | **Implémenté au Jour 6** (`migrated_test_database`, avec le propriétaire du schéma ; l'application teste avec `madasource_app`) |
 | **Isolation par test** : chaque test s'exécute dans une transaction externe annulée à la fin. La session applicative y travaille par points de sauvegarde (mode « rejoindre une transaction externe » de SQLAlchemy 2.x, `join_transaction_mode="create_savepoint"`). Les commits des services n'en sortent jamais. | **Implémenté au Jour 6** (`db_connection`, `db_session`, `api` : la vraie dépendance de session est conservée, seule sa fabrique rejoint la transaction externe ; l'identifiant de la transaction externe ne change jamais pendant un test, ce qui est vérifié). Limites : une seule connexion par test, donc pas de requêtes simultanées dans un même test ; les tests de migration modifient la base partagée par la session, donc pas d'exécution parallèle (pytest-xdist) ; la transaction externe est fermée par le serveur après 60 s d'inactivité (`idle_in_transaction_session_timeout`) : une pause plus longue au débogueur fait échouer le test |
@@ -134,8 +134,8 @@ Deux garde-fous complémentaires, contre le risque R-01 et les fuites de donnée
 
 | Test | Fréquence |
 |---|---|
-| `alembic upgrade head` sur une base vide | Chaque exécution de la suite (section 4) |
-| Montée par la commande `alembic` elle-même, sur une base vide, puis aucun écart (`make migrations-check`) | CI, avant les tests (Jour 7) |
+| `alembic upgrade head` sur une base vide | En local, à la première exécution de la suite après le démarrage de `db-test` (section 4). En CI, par `make migrations-check`, avant la suite, qui trouve alors la base à jour |
+| Montée par la commande `alembic` elle-même, puis aucun écart (`make migrations-check`, base de test seulement, garde-fou `_test`) | CI, avant les tests (Jour 7) ; en local à la demande |
 | Aucun écart entre modèles et migrations (`alembic check`) | Chaque exécution de la suite (`test_migrations.py`), donc en CI |
 | Dernière révision : `downgrade -1` puis `upgrade head`, sur la base de test uniquement | Chaque exécution de la suite, donc en CI |
 | Migration de données : test dédié avec un jeu de données de départ | Au cas par cas |
@@ -150,7 +150,7 @@ Fixées au Jour 7 : cibles de `backend/Makefile`, décrites dans `backend/README
 | Suite complète avec couverture (base de test démarrée) | `make test ENV_FILE=../.env` |
 | Un module | `uv run --env-file ../.env pytest tests -k rfqs -q` |
 
-La CI (`.github/workflows/ci.yml`) exécute les mêmes cibles : lint, format, vérification de types, frontières de l'architecture, suite complète avec PostgreSQL éphémère et couverture, contrôle des migrations, build Docker, recherche de secrets. Aucun contrôle n'est facultatif : un job en échec fait échouer la CI.
+La CI (`.github/workflows/ci.yml`) exécute les mêmes cibles : lint, format, vérification de types, frontières de l'architecture, suite complète avec PostgreSQL éphémère et couverture, contrôle des migrations, build Docker, recherche de secrets. Aucun contrôle n'est facultatif : un job en échec fait échouer la CI. Mais tant que la branche `main` n'est pas protégée sur GitHub (statuts requis), cet échec n'empêche ni un push direct ni une fusion (Q-104 f). Le workflow a été exécuté une première fois sur GitHub le 2026-10-14, dans sa version intermédiaire (commit `98dceb2`) : quatre jobs réussis.
 
 ## 10. Couverture
 

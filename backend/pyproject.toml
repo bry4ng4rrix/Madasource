@@ -51,6 +51,7 @@ select = [
     "PT",       # style pytest
     "T20",      # pas de print
     "RUF",      # règles propres à Ruff
+    "INP",      # paquet sans __init__.py : il échapperait à import-linter et au test d'architecture
 ]
 
 [tool.ruff.lint.isort]
@@ -60,7 +61,10 @@ known-third-party = ["alembic"]
 
 [tool.ruff.lint.per-file-ignores]
 # S101 : `assert` est le mécanisme d'assertion de pytest ; il reste interdit dans app/.
-"tests/**" = ["S101"]
+# INP001 : tests/ (pytest en mode importlib) et alembic/ (scripts chargés par Alembic) ne
+# sont pas des paquets, volontairement ; la règle vaut pour app/.
+"tests/**" = ["S101", "INP001"]
+"alembic/**" = ["INP001"]
 
 [tool.mypy]
 python_version = "3.14"
@@ -92,7 +96,7 @@ layers = [
     "app.main",
     # Racine de composition (module-boundaries.md §5.2), indépendante de la couche HTTP.
     "(app.wiring) | app.api",
-    "(app.modules)",
+    "app.modules",
     "(app.integrations)",
     "(app.common)",
     "app.db",

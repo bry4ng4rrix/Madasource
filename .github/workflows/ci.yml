@@ -7,6 +7,8 @@
 # - Droits du jeton en lecture seule, identifiants Git non conservés après le checkout.
 # - Aucun secret : la base de test est éphémère, sur le runner, avec les valeurs factices de
 #   .env.example. Aucune image n'est publiée, rien n'est déployé.
+# - Ne jamais ajouter les déclencheurs pull_request_target, workflow_run ni issue_comment :
+#   ils exécuteraient le contenu d'une pull request avec des droits étendus.
 name: CI
 
 on:
@@ -16,14 +18,21 @@ on:
 permissions:
   contents: read
 
+# Sur une pull request, une nouvelle exécution annule la précédente. Chaque push a son propre
+# groupe (identifiant d'exécution) : aucun push n'est annulé, ni mis en attente puis écarté.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash # bash -eo pipefail : une commande en échec dans un tube fait échouer l'étape
 
 env:
   UV_VERSION: "0.13.0"
   # Somme officielle de uv-x86_64-unknown-linux-gnu.tar.gz (release 0.13.0).
   UV_SHA256: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
+  # Même version que les images de backend/Dockerfile.
   PYTHON_VERSION: "3.14.8"
 
 jobs:
@@ -41,6 +50,9 @@ jobs:
           checksum: ${{ env.UV_SHA256 }}
           python-version: ${{ env.PYTHON_VERSION }}
           working-directory: backend
+          # Pas de cache partagé entre exécutions : chaque paquet est téléchargé et vérifié
+          # par les empreintes de uv.lock.
+          enable-cache: false
       - name: Dépendances (uv.lock, sans résolution)
         run: make -C backend install
       - name: Ruff, mypy, import-linter, cohérence de uv.lock
@@ -60,6 +72,7 @@ jobs:
           checksum: ${{ env.UV_SHA256 }}
           python-version: ${{ env.PYTHON_VERSION }}
           working-directory: backend
+          enable-cache: false
       - name: URL de la base de test (valeurs factices de .env.example)
         run: |
           pattern='^(TEST_DATABASE_URL|TEST_MIGRATION_DATABASE_URL)='
@@ -69,8 +82,8 @@ jobs:
         run: docker compose --env-file .env.example --profile test up --detach --wait db-test
       - name: Dépendances (uv.lock, sans résolution)
         run: make -C backend install
-      - name: Migrations depuis une base vide, puis absence d'écart avec les modèles
-        run: MIGRATION_DATABASE_URL="$TEST_MIGRATION_DATABASE_URL" make -C backend migrations-check
+      - name: Migrations depuis la base vide, puis absence d'écart avec les modèles
+        run: make -C backend migrations-check
       - name: Suite complète avec couverture (seuil dans pyproject.toml)
         run: make -C backend test
       - name: Journaux de la base de test
@@ -100,16 +113,28 @@ jobs:
       GITLEAKS_VERSION: "8.30.1"
       # Somme officielle de gitleaks_8.30.1_linux_x64.tar.gz (fichier checksums de la release).
       GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+      GITLEAKS_CONFIG: .github/gitleaks.toml
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Aucun fichier .env suivi par Git (seuls les .env.example le sont)
+      - name: Aucun fichier .env dans le dépôt ni dans son historique (sauf .env.example)
         run: |
-          tracked="$(git ls-files -- ':(glob)**/.env' ':(glob)**/.env.*' ':(exclude,glob)**/.env.example')"
-          if [ -n "$tracked" ]; then
-            echo "::error::Fichiers .env suivis par Git : $tracked"
+          spec=(':(glob)**/.env' ':(glob)**/.env.*' ':(glob)**/*.env' ':(glob)**/.envrc'
+                ':(exclude,glob)**/.env.example')
+          tracked="$(git ls-files -- "${spec[@]}")"
+          added="$(git log --all -m --diff-filter=A --name-only --pretty=format: -- "${spec[@]}" | sort -u)"
+          if [ -n "$tracked$added" ]; then
+            echo "::error::Fichiers .env dans le dépôt ou dans son historique : $(echo $tracked $added)"
+            exit 1
+          fi
+      - name: Aucune exception gitleaks hors de la configuration de la CI
+        run: |
+          # gitleaks lit toujours un .gitleaksignore présent à la racine analysée.
+          exceptions="$(git ls-files -- ':(glob)**/.gitleaks.toml' ':(glob)**/.gitleaksignore')"
+          if [ -n "$exceptions" ]; then
+            echo "::error::Exceptions gitleaks hors de $GITLEAKS_CONFIG : $exceptions"
             exit 1
           fi
       - name: gitleaks (binaire officiel, somme vérifiée)
@@ -120,5 +145,19 @@ jobs:
           echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$archive" | sha256sum --check --strict
           mkdir "$RUNNER_TEMP/gitleaks"
           tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/gitleaks" gitleaks
+      - name: Auto-test (un mot de passe aléatoire dans une URL doit être détecté)
+        run: |
+          dir="$RUNNER_TEMP/gitleaks-selftest"
+          mkdir "$dir"
+          printf 'DATABASE_URL=postgresql+asyncpg://madasource:%s@db.example.com:5432/madasource\n' \
+            "$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')" > "$dir/settings.env"
+          status=0
+          "$RUNNER_TEMP/gitleaks/gitleaks" dir --config "$GITLEAKS_CONFIG" --no-banner --redact \
+            --report-format json --report-path "$RUNNER_TEMP/gitleaks-selftest.json" "$dir" || status=$?
+          test "$status" -eq 1
+          grep -Eq '"RuleID": *"url-credentials"' "$RUNNER_TEMP/gitleaks-selftest.json"
       - name: Historique Git complet (valeurs masquées dans le rapport)
-        run: '"$RUNNER_TEMP/gitleaks/gitleaks" git --redact --no-banner --verbose .'
+        run: >-
+          "$RUNNER_TEMP/gitleaks/gitleaks" git --config "$GITLEAKS_CONFIG"
+          --gitleaks-ignore-path "$RUNNER_TEMP/gitleaks" --ignore-gitleaks-allow
+          --redact --no-banner --verbose .
