@@ -1,13 +1,11 @@
 """Construction des erreurs, sans base ni HTTP."""
 
-import uuid
-
 import pytest
 from sqlalchemy.exc import DBAPIError
 from starlette.datastructures import Headers
 
 from app.core import exceptions
-from app.core.errors import sanitize_validation_errors, sqlstate_of
+from app.core.errors import exception_summary, sanitize_validation_errors, sqlstate_of
 from app.core.middleware import incoming_request_id
 
 pytestmark = pytest.mark.unit
@@ -101,4 +99,62 @@ def test_incoming_request_id_must_be_a_uuid(value: str, expected: str | None) ->
 
 def test_incoming_request_id_absent() -> None:
     assert incoming_request_id(Headers({})) is None
-    assert uuid.UUID(str(uuid.uuid7())).version == 7
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (
+            {
+                "type": "union_tag_invalid",
+                "loc": ("body", "kind"),
+                "input": "x",
+                "msg": "Input tag 'Pa55w0rd-Secret' found using 'kind' does not match",
+            },
+            "Invalid value.",
+        ),
+        (
+            {
+                "type": "uuid_parsing",
+                "loc": ("path", "id"),
+                "input": "abc",
+                "msg": "Input should be a valid UUID, invalid character: found `a`",
+            },
+            "Invalid value.",
+        ),
+        (
+            {
+                "type": "value_error",
+                "loc": ("body", "code"),
+                "input": "SECRET-42",
+                "msg": "Value error, SECRET-42 is not allowed",
+            },
+            "Invalid value.",
+        ),
+        (
+            {"type": "missing", "loc": ("body", "name"), "input": {}, "msg": "Field required"},
+            "Field required",
+        ),
+    ],
+)
+def test_validation_messages_never_echo_the_input(error: dict[str, object], expected: str) -> None:
+    [sanitized] = sanitize_validation_errors([error])
+
+    assert sanitized.message == expected
+
+
+def test_exception_summary_has_no_exception_message() -> None:
+    try:
+        try:
+            raise ValueError("DETAIL: Failing row contains (FR7630006000011234567890189)")
+        except ValueError as cause:
+            raise DBAPIError("INSERT ...", None, _DriverError("23502")) from cause
+    except DBAPIError as exc:
+        summary = exception_summary(exc)
+
+    text = repr(summary)
+    assert "FR7630006000011234567890189" not in text
+    assert "DETAIL" not in text
+    assert summary["sqlstate"] == "23502"
+    assert any("DBAPIError" in name for name in summary["exception_types"])
+    assert summary["stack"]

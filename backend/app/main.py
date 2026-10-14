@@ -15,7 +15,7 @@ from app.api.v1.router import API_V1_PREFIX, api_router
 from app.core.config import Settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
-from app.core.middleware import REQUEST_ID_HEADER, RequestContextMiddleware
+from app.core.middleware import CORS_EXPOSED_HEADERS, REQUEST_ID_HEADER, RequestContextMiddleware
 from app.db.session import create_engine, create_session_factory
 
 API_TITLE = "MadaSource API"
@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 # En-têtes acceptés et exposés aux origines autorisées (api-conventions.md §11).
 CORS_ALLOWED_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"]
 CORS_ALLOWED_HEADERS = ["Authorization", "Content-Type", REQUEST_ID_HEADER, "X-Organization-Id"]
-CORS_EXPOSED_HEADERS = [REQUEST_ID_HEADER, "Retry-After"]
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -69,7 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_credentials=False,
         allow_methods=CORS_ALLOWED_METHODS,
         allow_headers=CORS_ALLOWED_HEADERS,
-        expose_headers=CORS_EXPOSED_HEADERS,
+        expose_headers=list(CORS_EXPOSED_HEADERS),
         max_age=600,
     )
     app.add_middleware(RequestContextMiddleware, demo=settings.app_env == "demo")

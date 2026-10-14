@@ -46,12 +46,20 @@ def _is_sensitive(key: str) -> bool:
 
 
 def sanitize(key: str, value: Any) -> Any:
-    """Masque une valeur dont la clé évoque un secret, y compris dans un dictionnaire imbriqué."""
+    """Masque une valeur dont la clé évoque un secret, à toute profondeur.
+
+    Les dictionnaires et les séquences sont parcourus ; un objet d'un autre type est
+    remplacé par le nom de son type, pour qu'aucune représentation imprévue ne fuie.
+    """
     if _is_sensitive(key):
         return REDACTED
+    if value is None or isinstance(value, str | int | float | bool):
+        return value
     if isinstance(value, dict):
         return {str(k): sanitize(str(k), v) for k, v in value.items()}
-    return value
+    if isinstance(value, list | tuple | set | frozenset):
+        return [sanitize(key, item) for item in value]
+    return f"<{type(value).__name__}>"
 
 
 class JsonFormatter(logging.Formatter):
@@ -80,6 +88,18 @@ class _MadaSourceHandler(logging.StreamHandler[TextIO]):
     """Gestionnaire reconnaissable, pour qu'une reconfiguration ne l'ajoute pas deux fois."""
 
 
+class DropServerErrorReplay(logging.Filter):
+    """Écarte la trace qu'uvicorn journalise après une erreur 500.
+
+    Starlette relance l'exception une fois la réponse 500 envoyée, et uvicorn la journalise
+    avec son message complet. Le gestionnaire d'erreurs de l'application l'a déjà
+    journalisée, nettoyée et avec son request_id : ce doublon est supprimé.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return not str(record.msg).startswith("Exception in ASGI application")
+
+
 def configure_logging(level: str) -> None:
     """Installe le formateur JSON sur le logger racine, sans retirer les autres gestionnaires.
 
@@ -97,4 +117,7 @@ def configure_logging(level: str) -> None:
         uvicorn_logger = logging.getLogger(name)
         uvicorn_logger.handlers.clear()
         uvicorn_logger.propagate = True
+    error_logger = logging.getLogger("uvicorn.error")
+    if not any(isinstance(f, DropServerErrorReplay) for f in error_logger.filters):
+        error_logger.addFilter(DropServerErrorReplay())
     logging.getLogger("uvicorn.access").disabled = True

@@ -65,3 +65,25 @@ def test_production_does_not_serve_openapi_or_docs() -> None:
         assert production_client.get("/api/v1/openapi.json").status_code == 404
         assert production_client.get("/api/v1/docs").status_code == 404
         assert production_client.get("/api/v1/health/live").status_code == 200
+
+
+def test_validation_errors_are_documented_as_problem_details(app: FastAPI) -> None:
+    from pydantic import BaseModel
+
+    from app.api.v1.router import api_router
+
+    class _Body(BaseModel):
+        name: str
+
+    async def create(body: _Body) -> dict[str, str]:
+        return {"name": body.name}
+
+    api_router.add_api_route("/_test/create", create, methods=["POST"], operation_id="test_create")
+    try:
+        schema = create_app(make_settings()).openapi()
+    finally:
+        api_router.routes.pop()
+
+    responses = schema["paths"]["/api/v1/_test/create"]["post"]["responses"]
+    assert "application/problem+json" in responses["422"]["content"]
+    assert "HTTPValidationError" not in schema.get("components", {}).get("schemas", {})

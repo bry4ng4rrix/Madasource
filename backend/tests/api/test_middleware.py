@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import create_app
-from tests.support import ALLOWED_ORIGIN, make_settings
+from tests.support import ALLOWED_ORIGIN, DEPLOYED_DATABASE_URL, make_settings
 
 pytestmark = pytest.mark.api
 
@@ -75,7 +75,9 @@ def test_cors_simple_request_exposes_request_id(client: TestClient) -> None:
 
 
 def test_demo_instance_marks_every_response() -> None:
-    app = create_app(make_settings(app_env="demo", demo_mode=True))
+    app = create_app(
+        make_settings(app_env="demo", demo_mode=True, database_url=DEPLOYED_DATABASE_URL)
+    )
     with TestClient(app) as demo_client:
         response = demo_client.get("/api/v1/health/live")
 

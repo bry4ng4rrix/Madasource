@@ -24,6 +24,10 @@ from app.core.logging import request_id_var
 
 REQUEST_ID_HEADER = "X-Request-ID"
 DEMO_MODE_HEADER = "X-MadaSource-Mode"
+# En-têtes de réponse lisibles par le frontend d'une autre origine (api-conventions.md §11).
+CORS_EXPOSED_HEADERS: tuple[str, ...] = (REQUEST_ID_HEADER, "Retry-After")
+# Sondes appelées en boucle par l'orchestrateur : journal d'accès au niveau DEBUG.
+QUIET_ACCESS_LOG_PREFIXES: tuple[str, ...] = ("/api/v1/health/",)
 # security-design.md §16 : toute réponse de l'API est privée par défaut.
 SECURITY_HEADERS: dict[str, str] = {
     "X-Content-Type-Options": "nosniff",
@@ -93,9 +97,16 @@ class RequestContextMiddleware:
         try:
             await self.app(scope, receive, send_with_headers)
         finally:
-            access_logger.info(
+            level = (
+                logging.DEBUG
+                if scope["path"].startswith(QUIET_ACCESS_LOG_PREFIXES)
+                else logging.INFO
+            )
+            access_logger.log(
+                level,
                 "request",
                 extra={
+                    "request_id": request_id,
                     "method": scope["method"],
                     "path": scope["path"],
                     "status": status_code,

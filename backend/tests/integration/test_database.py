@@ -80,3 +80,33 @@ def test_engine_is_disposed_on_shutdown(db_settings: Settings) -> None:
         assert engine.pool.checkedin() >= 1
 
     assert engine.pool.checkedin() == 0
+
+
+def test_session_is_closed_before_the_response_is_sent(db_settings: Settings) -> None:
+    """D-08 : portée `function`, la connexion est rendue avant l'envoi de la réponse."""
+    from starlette.types import ASGIApp, Message, Receive, Scope, Send
+
+    app = create_app(db_settings)
+    checked_out_at_response_start: list[int] = []
+
+    async def query(session: DbSession) -> dict[str, int]:
+        return {"value": (await session.execute(text("SELECT 1"))).scalar_one()}
+
+    class _Probe:
+        def __init__(self, inner: ASGIApp) -> None:
+            self.inner = inner
+
+        async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+            async def probe_send(message: Message) -> None:
+                if message["type"] == "http.response.start" and scope["path"].endswith("/query"):
+                    checked_out_at_response_start.append(app.state.engine.pool.checkedout())
+                await send(message)
+
+            await self.inner(scope, receive, probe_send)
+
+    app.add_api_route("/api/v1/_test/query", query, methods=["GET"])
+    app.add_middleware(_Probe)
+    with TestClient(app) as test_client:
+        assert test_client.get("/api/v1/_test/query").json() == {"value": 1}
+
+    assert checked_out_at_response_start == [0]

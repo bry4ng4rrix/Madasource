@@ -4,11 +4,11 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.config import Settings
-from tests.support import make_settings
+from tests.support import DEPLOYED_DATABASE_URL, make_settings
 
 pytestmark = pytest.mark.unit
 
-PRODUCTION_URL = "postgresql+asyncpg://madasource:StrongValue42@db.example.com:5432/madasource"
+PRODUCTION_URL = DEPLOYED_DATABASE_URL
 
 
 def test_valid_local_settings() -> None:
@@ -101,7 +101,9 @@ def test_demo_mode_and_demo_environment_go_together(app_env: str, demo_mode: boo
 
 
 def test_demo_environment_disables_docs() -> None:
-    assert make_settings(app_env="demo", demo_mode=True).docs_enabled is False
+    settings = make_settings(app_env="demo", demo_mode=True, database_url=PRODUCTION_URL)
+
+    assert settings.docs_enabled is False
 
 
 @pytest.mark.parametrize(
@@ -114,7 +116,7 @@ def test_malformed_cors_origin_is_refused(origin: str) -> None:
 
 def test_settings_read_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("APP_ENV", "staging")
-    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@h/db")
+    monkeypatch.setenv("DATABASE_URL", PRODUCTION_URL)
     monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "https://a.example.com, http://localhost:3000")
     monkeypatch.setenv("LOG_LEVEL", "WARNING")
 
@@ -126,7 +128,67 @@ def test_settings_read_from_environment(monkeypatch: pytest.MonkeyPatch) -> None
 
 
 def test_missing_database_url_prevents_start(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_ENV", "local")
     monkeypatch.delenv("DATABASE_URL", raising=False)
 
     with pytest.raises(ValidationError, match="database_url"):
         Settings()
+
+
+def test_app_env_is_required(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Sans APP_ENV, une instance déployée ne doit pas tomber dans le régime de local.
+    monkeypatch.delenv("APP_ENV", raising=False)
+    monkeypatch.setenv("DATABASE_URL", PRODUCTION_URL)
+
+    with pytest.raises(ValidationError, match="app_env"):
+        Settings()
+
+
+@pytest.mark.parametrize("password", ["Xy7@Secret:Part99", "p@ss:wo:rd@Leak77"])
+def test_database_url_parse_error_does_not_reveal_password(password: str) -> None:
+    url = f"postgresql+asyncpg://madasource:{password}@db.example.com:5432/madasource"
+
+    with pytest.raises(ValidationError) as excinfo:
+        make_settings(database_url=url)
+
+    message = str(excinfo.value)
+    assert "n'est pas une URL" in message
+    for fragment in ("Secret", "Part99", "Leak77", "db.example.com"):
+        assert fragment not in message
+
+
+@pytest.mark.parametrize("app_env", ["staging", "production", "demo"])
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"cors_allowed_origins": ("*",)}, "ne peut pas contenir"),
+        (
+            {"database_url": "postgresql+asyncpg://u:changeme0local0only@h/db"},
+            "mot de passe d'exemple",
+        ),
+        ({"database_url": "postgresql+asyncpg://u:short@h/db"}, "au moins 12"),
+        ({"database_url": "postgresql+asyncpg://u@h/db"}, "au moins 12"),
+    ],
+)
+def test_deployed_environments_refuse_dangerous_settings(
+    app_env: str, overrides: dict[str, object], message: str
+) -> None:
+    values: dict[str, object] = {
+        "app_env": app_env,
+        "demo_mode": app_env == "demo",
+        "database_url": PRODUCTION_URL,
+        "cors_allowed_origins": ("https://app.example.com",),
+    }
+    values.update(overrides)
+    with pytest.raises(ValidationError, match=message):
+        make_settings(**values)
+
+
+def test_production_refuses_debug_logs() -> None:
+    with pytest.raises(ValidationError, match="DEBUG"):
+        make_settings(
+            app_env="production",
+            database_url=PRODUCTION_URL,
+            cors_allowed_origins=("https://app.example.com",),
+            log_level="DEBUG",
+        )

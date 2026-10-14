@@ -7,6 +7,8 @@ from app.core.config import Settings
 # Aucun service n'écoute sur ce port : toute connexion est refusée immédiatement.
 UNREACHABLE_DATABASE_URL = "postgresql+asyncpg://unused:unused@127.0.0.1:9/unreachable"
 ALLOWED_ORIGIN = "http://localhost:3000"
+# URL injoignable au mot de passe assez fort pour un environnement déployé (valeur factice).
+DEPLOYED_DATABASE_URL = "postgresql+asyncpg://madasource:StrongValue42xyz@127.0.0.1:9/madasource"
 
 
 def make_settings(**overrides: Any) -> Settings:

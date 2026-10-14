@@ -39,7 +39,7 @@ Depuis `backend/` :
 | Base de test (avant les tests) | `docker compose --profile test up -d db-test` (depuis la racine) |
 | Tests : suite complète | `uv run --env-file ../.env pytest` |
 | Tests sans base | `uv run pytest -m "not integration"` (sélection, pas la suite complète) |
-| Serveur local | `uv run --env-file ../.env uvicorn --factory app.main:create_app --reload --port 8002 --no-access-log` |
+| Serveur local | `uv run --env-file ../.env uvicorn --factory app.main:create_app --reload --port 8002 --no-access-log --no-server-header` |
 | Migrations : têtes | `uv run alembic heads` |
 | Migrations : SQL hors ligne | `uv run --env-file ../.env alembic upgrade head --sql` |
 | Migrations : application | `uv run --env-file ../.env alembic upgrade head` (base démarrée) |
@@ -47,7 +47,7 @@ Depuis `backend/` :
 Points de fonctionnement :
 - **tests** : marqueurs `unit` (sans base ni HTTP), `api` (client HTTP en mémoire, sans base), `integration` (base de test). Tout avertissement est traité comme une erreur (`filterwarnings = error`). Sans `TEST_DATABASE_URL`, les tests d'intégration **échouent** avec la marche à suivre : ils ne sont jamais ignorés ;
 - **base de test** : service `db-test` (profil `test`), données en mémoire (`tmpfs`), vides à chaque démarrage, port hôte 5434. La configuration de test refuse toute base dont le nom ne se termine pas par `_test`. Jamais la base de développement ;
-- **serveur** : `--factory` appelle `create_app()`, qui lit et valide la configuration ; `--no-access-log` laisse un seul journal d'accès, celui de l'application (D-12) ;
+- **serveur** : `--factory` appelle `create_app()`, qui lit et valide la configuration ; `--no-access-log` laisse un seul journal d'accès, celui de l'application (D-12) ; `--no-server-header` retire la bannière `server: uvicorn` ;
 - **migrations** : Alembic lit `DATABASE_URL` dans l'environnement, jamais dans `alembic.ini`. Chaque révision générée est corrigée puis formatée par Ruff (hooks d'`alembic.ini`). Aucune migration avant le Jour 6. Règles : skill `database-migrations` ; jamais de `downgrade base` ni de réinitialisation d'une base.
 
 ## Docker Compose

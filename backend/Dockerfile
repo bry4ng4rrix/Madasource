@@ -30,5 +30,7 @@ ENV PATH="/app/.venv/bin:${PATH}" \
     PYTHONUNBUFFERED=1
 USER 10001:10001
 EXPOSE 8000
-# Fabrique d'application ; un seul journal d'accès, celui de l'application (D-12).
-CMD ["uvicorn", "--factory", "app.main:create_app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+# Fabrique d'application ; un seul journal d'accès, celui de l'application (D-12) ;
+# aucune bannière de version (en-tête Server, security-design.md §16).
+CMD ["uvicorn", "--factory", "app.main:create_app", "--host", "0.0.0.0", "--port", "8000", \
+     "--no-access-log", "--no-server-header"]

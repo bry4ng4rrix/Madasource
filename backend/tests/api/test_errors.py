@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import DBAPIError
+from starlette.exceptions import HTTPException
 
 from app.core import exceptions
 from tests.support import ALLOWED_ORIGIN
@@ -47,7 +48,13 @@ def error_client(app: FastAPI) -> Iterator[TestClient]:
     app.add_api_route("/api/v1/_test/validate", validate, methods=["POST"])
     app.add_api_route("/api/v1/_test/app-error/{name}", raise_app_error, methods=["GET"])
     app.add_api_route("/api/v1/_test/db-error/{sqlstate}", raise_database_error, methods=["GET"])
+
+    async def raise_http_error(status: int) -> None:
+        headers = {"WWW-Authenticate": "Bearer"}
+        raise HTTPException(status, detail="framework detail", headers=headers)
+
     app.add_api_route("/api/v1/_test/boom", raise_unexpected, methods=["GET"])
+    app.add_api_route("/api/v1/_test/http-error/{status}", raise_http_error, methods=["GET"])
     with TestClient(app, raise_server_exceptions=False) as test_client:
         yield test_client
 
@@ -174,3 +181,65 @@ def test_unexpected_error_has_no_cors_header_for_unknown_origin(error_client: Te
 
     assert response.status_code == 500
     assert "access-control-allow-origin" not in response.headers
+
+
+@pytest.mark.parametrize(
+    ("status", "code"),
+    [
+        (401, "AUTHENTICATION_REQUIRED"),
+        (409, "CONFLICT"),
+        (410, "RESOURCE_NOT_FOUND"),
+        (418, "BAD_REQUEST"),
+    ],
+)
+def test_framework_http_errors_keep_status_code_and_safe_headers(
+    error_client: TestClient, status: int, code: str
+) -> None:
+    response = error_client.get(f"/api/v1/_test/http-error/{status}")
+
+    assert response.status_code == status
+    _assert_problem(status, response.json(), code)
+    assert "framework detail" not in response.text
+    # WWW-Authenticate est transmis quelle que soit sa casse (RFC 9110 §15.5.2).
+    assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_database_fallback_500_has_a_single_vary_origin(error_client: TestClient) -> None:
+    response = error_client.get("/api/v1/_test/db-error/23505", headers={"Origin": ALLOWED_ORIGIN})
+
+    assert response.status_code == 500
+    assert response.headers["access-control-allow-origin"] == ALLOWED_ORIGIN
+    assert response.headers.get_list("vary") == ["Origin"]
+
+
+def test_wildcard_cors_on_500_answers_star() -> None:
+    from app.main import create_app
+    from tests.support import make_settings
+
+    app = create_app(make_settings(cors_allowed_origins=("*",)))
+
+    async def boom() -> None:
+        raise RuntimeError("unexpected")
+
+    app.add_api_route("/api/v1/_test/boom", boom, methods=["GET"])
+    with TestClient(app, raise_server_exceptions=False) as test_client:
+        response = test_client.get("/api/v1/_test/boom", headers={"Origin": "https://any.example"})
+
+    assert response.status_code == 500
+    assert response.headers["access-control-allow-origin"] == "*"
+
+
+def test_uuid_parsing_error_does_not_echo_the_input(app: FastAPI) -> None:
+    import uuid
+
+    async def by_id(item_id: uuid.UUID) -> dict[str, str]:
+        return {"id": str(item_id)}
+
+    app.add_api_route("/api/v1/_test/items/{item_id}", by_id, methods=["GET"])
+    with TestClient(app) as test_client:
+        response = test_client.get("/api/v1/_test/items/zz-SECRET-zz")
+
+    assert response.status_code == 422
+    assert "SECRET" not in response.text
+    [error] = response.json()["errors"]
+    assert error == {"field": "path.item_id", "code": "uuid_parsing", "message": "Invalid value."}
