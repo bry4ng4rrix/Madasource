@@ -202,3 +202,27 @@ def test_database_unavailability_is_logged_as_error(
     assert entry["level"] == "ERROR"
     assert entry["path"] == "/api/v1/_test/lost"
     assert "db.internal" not in line
+
+
+def test_database_connect_failure_cause_is_logged_without_message(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    import asyncpg
+
+    # Adresse construite à l'exécution : la pile reprend les lignes de code, pas les valeurs.
+    host = ".".join(["10", "0", "0", "42"])
+
+    async def refused(*args: object, **kwargs: object) -> None:
+        raise ConnectionRefusedError(111, f"Connect call failed ('{host}', 5432)")
+
+    monkeypatch.setattr(asyncpg, "connect", refused)
+    caplog.set_level(logging.INFO, logger="app.db.session")
+    with TestClient(app, raise_server_exceptions=False) as test_client:
+        assert test_client.get("/api/v1/health/ready").status_code == 503
+
+    [line] = _formatted(caplog, "app.db.session")
+    entry = json.loads(line)
+    assert entry["message"] == "database_connect_failed"
+    assert entry["errno"] == 111
+    assert "builtins.ConnectionRefusedError" in entry["exception_types"]
+    assert "10.0.0.42" not in line

@@ -68,6 +68,12 @@ files = ["app", "tests", "alembic/env.py", "alembic/versions"]
 mypy_path = "."
 explicit_package_bases = true
 
+[[tool.mypy.overrides]]
+# asyncpg ne publie pas d'annotations de types (ni py.typed, ni stubs officiels) ; il n'est
+# importé que par les tests, qui simulent ses erreurs de connexion.
+module = ["asyncpg", "asyncpg.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 minversion = "9.0"
 testpaths = ["tests"]

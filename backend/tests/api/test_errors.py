@@ -1,7 +1,9 @@
 """Format Problem Details de toutes les erreurs (error-handling.md §10)."""
 
+import socket
 from collections.abc import Iterator
 
+import asyncpg
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -147,6 +149,10 @@ def test_authentication_error_has_www_authenticate(error_client: TestClient) -> 
         ("55P03", 409, "CONCURRENT_MODIFICATION"),
         ("57014", 503, "SERVICE_UNAVAILABLE"),
         ("08006", 503, "SERVICE_UNAVAILABLE"),
+        ("28P01", 503, "SERVICE_UNAVAILABLE"),
+        ("3D000", 503, "SERVICE_UNAVAILABLE"),
+        ("53300", 503, "SERVICE_UNAVAILABLE"),
+        ("57P01", 503, "SERVICE_UNAVAILABLE"),
         ("23505", 500, "INTERNAL_ERROR"),
     ],
 )
@@ -157,6 +163,7 @@ def test_database_errors_are_translated(
 
     assert response.status_code == status
     _assert_problem(status, response.json(), code)
+    assert response.headers.get("retry-after") == ("5" if status == 503 else None)
     for fragment in ("secret_column", "SELECT", "internal detail", sqlstate):
         assert fragment not in response.text
 
@@ -260,3 +267,57 @@ def test_unreachable_database_during_a_request_is_a_503(app: FastAPI) -> None:
     assert response.headers["retry-after"] == "5"
     _assert_problem(503, response.json(), "SERVICE_UNAVAILABLE")
     assert "127.0.0.1" not in response.text
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        ConnectionRefusedError(111, "Connection refused"),
+        OSError("Multiple exceptions: [Errno 111] ..., [Errno 99] ..."),
+        socket.gaierror(-2, "Name or service not known"),
+        TimeoutError(),
+    ],
+    ids=["refused", "all-addresses-failed", "dns-failure", "timeout"],
+)
+def test_database_connection_failures_are_503(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch, failure: OSError
+) -> None:
+    """Erreurs levées par asyncpg à l'ouverture d'une connexion, simulées sans réseau."""
+
+    async def failing_connect(*args: object, **kwargs: object) -> None:
+        raise failure
+
+    monkeypatch.setattr(asyncpg, "connect", failing_connect)
+
+    async def query(session: DbSession) -> dict[str, int]:
+        return {"value": (await session.execute(text("SELECT 1"))).scalar_one()}
+
+    app.add_api_route("/api/v1/_test/query", query, methods=["GET"])
+    with TestClient(app, raise_server_exceptions=False) as test_client:
+        response = test_client.get("/api/v1/_test/query")
+        ready = test_client.get("/api/v1/health/ready")
+
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "5"
+    _assert_problem(503, response.json(), "SERVICE_UNAVAILABLE")
+    assert ready.status_code == 503
+    for fragment in ("Connection refused", "Multiple exceptions", "Name or service", "127.0.0.1"):
+        assert fragment not in response.text
+
+
+def test_timeouts_outside_the_database_remain_500(error_client: TestClient, app: FastAPI) -> None:
+    """La conversion en 503 est limitée à l'ouverture d'une connexion à la base."""
+
+    async def file_error() -> None:
+        raise FileNotFoundError("missing.pdf")
+
+    async def other_timeout() -> None:
+        raise TimeoutError
+
+    app.add_api_route("/api/v1/_test/file-error", file_error, methods=["GET"])
+    app.add_api_route("/api/v1/_test/timeout", other_timeout, methods=["GET"])
+
+    file_response = error_client.get("/api/v1/_test/file-error")
+    assert file_response.status_code == 500
+    assert "missing.pdf" not in file_response.text
+    assert error_client.get("/api/v1/_test/timeout").status_code == 500

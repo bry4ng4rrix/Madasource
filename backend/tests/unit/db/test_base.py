@@ -100,3 +100,19 @@ def test_application_schema_type_policy() -> None:
                 assert column.type.scale is not None, f"{table.name}.{column.name}"
             if isinstance(column.type, DateTime):
                 assert column.type.timezone, f"{table.name}.{column.name} : datetime naïf"
+
+
+def test_constraint_and_index_names_fit_postgresql_and_are_unique() -> None:
+    """Garde-fou pour les modèles futurs (indexes-and-constraints.md §1).
+
+    Au-delà de 63 caractères, SQLAlchemy raccourcirait le nom en silence : un tel nom doit
+    être déclaré explicitement. Un nom en double (clé étrangère composite et simple sur la
+    même première colonne, par exemple) ferait échouer la migration.
+    """
+    names: list[str] = []
+    for table in [*load_metadata().tables.values(), PARENT, CHILD]:
+        names += [str(c.name) for c in table.constraints if c.name is not None]
+        names += [str(i.name) for i in table.indexes if i.name is not None]
+
+    assert all(len(name) <= 63 for name in names), [n for n in names if len(n) > 63]
+    assert len(names) == len(set(names))

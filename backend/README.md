@@ -67,7 +67,8 @@ Règles :
 - chaque révision générée est corrigée puis formatée par Ruff (hooks d'`alembic.ini`) ; les fichiers sont nommés `AAAAMMJJ_HHMM_<révision>_<message>.py` (UTC) ;
 - l'autogénération ne voit pas les contraintes `CHECK` ni les droits : ils s'écrivent à la main (`indexes-and-constraints.md` §3.5) ;
 - **chaque migration qui crée une table accorde explicitement ses droits** au rôle `madasource_app` (`GRANT`, par table et par colonne, `indexes-and-constraints.md` §6.2) : sans cela, l'application ne peut pas l'utiliser ;
-- **retour arrière prudent** : `uv run --env-file ../.env alembic downgrade -1`, une révision à la fois, seulement sur une base de développement ou de test, après relecture du `downgrade` et sauvegarde si des données existent. Jamais `downgrade base`, jamais de réinitialisation de base ni de suppression de volume pour « réparer » ; jamais sur une base de production ;
+- **retour arrière prudent** : `uv run --env-file ../.env alembic downgrade -1`, une révision à la fois, seulement sur une base de développement ou de test, après relecture du `downgrade` et sauvegarde si des données existent. Ne jamais descendre sous la première révision (`03d1bd152b99`) : ce serait un `downgrade base`. Jamais de réinitialisation de base ni de suppression de volume pour « réparer » ; jamais sur une base de production ;
+- **exécution** : un verrou consultatif sérialise les migrations (une seconde migration simultanée attend la première) ; ensuite, une migration qui attend un verrou de table plus de 10 s échoue au lieu de bloquer le trafic. Le SQL hors ligne (`--sql`) contient les mêmes protections ;
 - les migrations ne s'exécutent pas au démarrage de l'application (D-26).
 
 Rôle applicatif : il est créé par `infrastructure/postgres/10-create-app-role.sh` à l'initialisation d'une base vide. Pour une base déjà initialisée (volume existant), relancer le script, idempotent :
@@ -76,7 +77,7 @@ Rôle applicatif : il est créé par `infrastructure/postgres/10-create-app-role
 docker compose exec db sh /docker-entrypoint-initdb.d/10-create-app-role.sh
 ```
 
-La première migration (`schema privileges baseline`) refuse de s'appliquer si ce rôle n'existe pas.
+La première migration (`schema privileges baseline`) refuse de s'appliquer si ce rôle n'existe pas ; la deuxième (`verify schema privileges`) échoue si les droits n'ont pas réellement pris effet. Le script n'est exécuté automatiquement qu'à l'initialisation d'une base vide ; le dossier `infrastructure/postgres` est monté, donc une modification du script est visible sans recréer le conteneur.
 
 ## Docker Compose
 
@@ -121,7 +122,7 @@ Toutes sont documentées dans `.env.example` (racine), avec des valeurs factices
 | `LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `CORS_ALLOWED_ORIGINS` | Origines autorisées, séparées par des virgules |
 | `DEMO_MODE` | `true` seulement avec `APP_ENV=demo` (D-18) |
-| `DATABASE_POOL_SIZE`, `DATABASE_MAX_OVERFLOW`, `DATABASE_CONNECT_TIMEOUT_SECONDS`, `DATABASE_STATEMENT_TIMEOUT_MS`, `READINESS_TIMEOUT_SECONDS` | Réglages facultatifs de la base |
+| `DATABASE_POOL_SIZE`, `DATABASE_MAX_OVERFLOW`, `DATABASE_CONNECT_TIMEOUT_SECONDS`, `DATABASE_STATEMENT_TIMEOUT_MS`, `DATABASE_LOCK_TIMEOUT_MS`, `DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `READINESS_TIMEOUT_SECONDS` | Réglages facultatifs de la base (délais : Q-103) |
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Base de développement créée par Compose ; `POSTGRES_USER` en est le propriétaire du schéma |
 | `POSTGRES_APP_PASSWORD` | Mot de passe du rôle applicatif sur la base de développement |
 | `POSTGRES_TEST_PASSWORD`, `POSTGRES_TEST_APP_PASSWORD`, `TEST_DATABASE_URL`, `TEST_MIGRATION_DATABASE_URL` | Base de test éphémère (propriétaire et rôle applicatif) |

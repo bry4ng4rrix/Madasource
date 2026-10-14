@@ -229,7 +229,7 @@ Pas d'index sur `quotation_versions.expires_at` : il couvrirait toutes les versi
 | Propriétaire du schéma | Propriétaire du schéma, DDL | Alembic seulement (`MIGRATION_DATABASE_URL`). En local : `POSTGRES_USER` de Compose ; en production : un rôle propriétaire non superutilisateur, à créer par l'exploitation (proposition de nom : `madasource_migrator`, Audit D) |
 | `madasource_app` | DML sur les tables accordées, sans DDL, sans droit de propriétaire | Application (API, tâches) (`DATABASE_URL`) |
 
-**Retenu au Jour 6 (2026-10-14)**, choix de l'utilisateur. Le rôle applicatif est créé hors des migrations, car il porte un mot de passe (`infrastructure/postgres/10-create-app-role.sh` en local). La première migration (`schema privileges baseline`) retire au rôle `PUBLIC` l'usage du schéma `public` et l'accorde au seul `madasource_app`. Chaque migration qui crée une table accorde ensuite explicitement ses droits (§6.2) : aucun droit par défaut. Aucun rôle superutilisateur n'est utilisé par l'application. Vérifié par `tests/integration/test_privileges.py`.
+**Retenu au Jour 6 (2026-10-14)**, choix de l'utilisateur. Le rôle applicatif est créé hors des migrations, car il porte un mot de passe (`infrastructure/postgres/10-create-app-role.sh` en local). La première migration (`schema privileges baseline`) retire au rôle `PUBLIC` l'usage du schéma `public` et l'accorde au seul `madasource_app` ; la deuxième (`verify schema privileges`) vérifie que ces droits ont réellement pris effet, car exécutés sans droits suffisants, `REVOKE` et `GRANT` ne lèvent qu'un avertissement. Chaque migration qui crée une table accorde ensuite explicitement ses droits (§6.2) : aucun droit par défaut. Aucun rôle superutilisateur n'est utilisé par l'application. Vérifié par `tests/integration/test_privileges.py`.
 
 ### 6.2 Droits de `madasource_app`
 
@@ -282,6 +282,14 @@ Règles du Jour 2 (D-09), appliquées au modèle. L'ordre suit les niveaux des m
 | Expédition, suivi, exception, litige qui modifient le Trade | `trades`, puis `shipments`, `exception_cases` ou `disputes` | — |
 
 Règle générale : toute écriture du statut d'une RFQ (`QUOTATIONS_RECEIVED`, `NEGOTIATING`, `ACCEPTED`, `CLOSED`, Q-95) verrouille `rfqs` **en premier**. Sans cela, une contre-offre qui verrouillerait `negotiations` puis écrirait `rfqs` entrerait en interblocage avec une acceptation (`rfqs` → `quotations` → `negotiations`). Le verrou sur `rfqs` sérialise aussi les acceptations concurrentes de lignes d'une même RFQ (Q-25, Q-26).
+
+Délais (Jour 6, valeurs proposées, Q-103) : `lock_timeout` de 5 s pour l'application (SQLSTATE 55P03, puis 409 `CONCURRENT_MODIFICATION`), `idle_in_transaction_session_timeout` de 60 s ; pour les migrations, un verrou consultatif (`pg_advisory_xact_lock`) : une seconde migration simultanée **attend** la première, puis toute attente de verrou de plus de 10 s fait échouer la migration au lieu de bloquer le trafic.
+
+Registre des clés de verrous consultatifs (un seul espace de clés sur 64 bits : toute nouvelle clé est déclarée ici) :
+
+| Clé | Usage | Déclarée dans |
+|---|---|---|
+| `7302418559001` | Migrations Alembic | `backend/alembic/env.py` |
 
 Compteurs : `failed_login_count` est incrémenté par une instruction atomique (`SET failed_login_count = failed_login_count + 1`), hors transaction principale (D-29).
 

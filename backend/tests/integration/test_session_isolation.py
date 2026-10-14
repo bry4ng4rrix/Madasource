@@ -1,8 +1,11 @@
 """Session de requête dans la base de test : validation, annulation, fermeture, isolation.
 
 Chaque test travaille dans la transaction externe de la fixture `db_connection`, annulée à
-la fin : rien ne subsiste d'un test à l'autre. Faute de table métier au Jour 6, les essais
-utilisent une table temporaire, que le rôle applicatif a le droit de créer.
+la fin : rien ne subsiste d'un test à l'autre, et l'identifiant de cette transaction ne
+change jamais pendant le test. Faute de table métier au Jour 6, les essais utilisent une
+table temporaire, que le rôle applicatif a le droit de créer (Q-103). La fixture `api`
+partage une seule connexion : des requêtes simultanées dans un même test ne sont pas
+prises en charge (les tests de concurrence auront leur propre base, testing-strategy §4).
 """
 
 import httpx2
@@ -87,8 +90,35 @@ async def test_each_request_gets_its_own_session(
     assert await _values(db_connection) == ["committed", "committed"]
 
 
-async def test_nothing_leaks_from_a_previous_test(db_connection: AsyncConnection) -> None:
-    # La table temporaire et ses lignes des tests précédents ont été annulées avec eux.
-    exists = await db_connection.scalar(text("SELECT to_regclass('pg_temp.probe_writes')"))
+async def test_request_commits_never_leave_the_outer_transaction(
+    probe_api: tuple[httpx2.AsyncClient, list[AsyncSession]], db_connection: AsyncConnection
+) -> None:
+    """Un commit de la session de requête libère seulement un point de sauvegarde."""
+    client, _ = probe_api
+    before = await db_connection.scalar(text("SELECT pg_current_xact_id()::text"))
 
-    assert exists is None
+    await client.post("/api/v1/_test/write")
+    await client.post("/api/v1/_test/write-then-fail")
+
+    after = await db_connection.scalar(text("SELECT pg_current_xact_id()::text"))
+    assert after == before
+    assert db_connection.in_transaction()
+
+
+async def test_db_session_commit_stays_in_the_outer_transaction(
+    db_session: AsyncSession, db_connection: AsyncConnection
+) -> None:
+    before = await db_connection.scalar(text("SELECT pg_current_xact_id()::text"))
+    await db_session.execute(text(CREATE_PROBE))
+    await db_session.execute(text("INSERT INTO probe_writes VALUES ('from-session')"))
+    await db_session.commit()
+
+    assert await _values(db_connection) == ["from-session"]
+    assert await db_connection.scalar(text("SELECT pg_current_xact_id()::text")) == before
+
+
+async def test_session_timeouts_are_set(db_connection: AsyncConnection) -> None:
+    # Valeurs proposées (Q-103) : verrou 5 s, transaction inactive 60 s, requête 5 s en test.
+    assert await db_connection.scalar(text("SHOW lock_timeout")) == "5s"
+    assert await db_connection.scalar(text("SHOW idle_in_transaction_session_timeout")) == "1min"
+    assert await db_connection.scalar(text("SHOW statement_timeout")) == "5s"

@@ -19,8 +19,9 @@ services:
     volumes:
       # PostgreSQL 18 : PGDATA=/var/lib/postgresql/18/docker, volume déclaré sur /var/lib/postgresql.
       - madasource_pgdata:/var/lib/postgresql
-      # Création du rôle applicatif à l'initialisation d'une base vide (idempotent).
-      - ./infrastructure/postgres/10-create-app-role.sh:/docker-entrypoint-initdb.d/10-create-app-role.sh:ro
+      # Création du rôle applicatif à l'initialisation d'une base vide (idempotent). Le dossier
+      # est monté, et non le fichier : un fichier monté seul reste figé à sa version d'origine.
+      - ./infrastructure/postgres:/docker-entrypoint-initdb.d:ro
     healthcheck:
       # -h 127.0.0.1 : passe par TCP. Pendant l'initialisation, le serveur temporaire n'écoute
       # que sur le socket Unix ; sans -h, la base paraîtrait prête trop tôt.
@@ -75,7 +76,7 @@ services:
     tmpfs:
       - /var/lib/postgresql
     volumes:
-      - ./infrastructure/postgres/10-create-app-role.sh:/docker-entrypoint-initdb.d/10-create-app-role.sh:ro
+      - ./infrastructure/postgres:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U madasource_test -d madasource_test"]
       interval: 2s

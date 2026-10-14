@@ -26,7 +26,8 @@ from app.core.config import parse_database_url
 from app.db.registry import load_metadata
 
 MIGRATION_URL_VARIABLE = "MIGRATION_DATABASE_URL"
-# Clé du verrou consultatif des migrations (pg_advisory_xact_lock), constante du projet.
+# Clé du verrou consultatif des migrations (pg_advisory_xact_lock). Registre des clés :
+# indexes-and-constraints.md §7 ; toute nouvelle clé y est déclarée pour éviter une collision.
 MIGRATION_LOCK_KEY = 7_302_418_559_001
 # Une migration qui attend un verrou plus longtemps échoue (SQLSTATE 55P03) : proposé, Q-103.
 MIGRATION_LOCK_TIMEOUT = "10s"
@@ -55,6 +56,21 @@ def get_database_url() -> str:
     return url
 
 
+def _guard_statements() -> list[str]:
+    """Verrou consultatif, puis délai d'attente des verrous des migrations.
+
+    Une seconde migration simultanée **attend** la première (`lock_timeout` désactivé le
+    temps de prendre le verrou consultatif) ; ensuite, toute attente de verrou de plus de
+    10 s fait échouer la migration au lieu de bloquer le trafic. Le verrou est libéré avec
+    la transaction.
+    """
+    return [
+        "SET LOCAL lock_timeout = 0",
+        f"SELECT pg_advisory_xact_lock({MIGRATION_LOCK_KEY})",
+        f"SET LOCAL lock_timeout = '{MIGRATION_LOCK_TIMEOUT}'",
+    ]
+
+
 def run_migrations_offline() -> None:
     """Génère le SQL des migrations sans connexion à la base."""
     context.configure(
@@ -67,6 +83,9 @@ def run_migrations_offline() -> None:
     )
 
     with context.begin_transaction():
+        # Le SQL généré porte les mêmes protections que l'exécution en ligne.
+        for statement in _guard_statements():
+            context.execute(statement)
         context.run_migrations()
 
 
@@ -79,18 +98,14 @@ def do_run_migrations(connection: Connection) -> None:
     )
 
     with context.begin_transaction():
-        # Un seul processus migre à la fois ; le verrou est libéré avec la transaction.
-        connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": MIGRATION_LOCK_KEY})
+        for statement in _guard_statements():
+            connection.execute(text(statement))
         context.run_migrations()
 
 
 async def run_async_migrations() -> None:
     """Applique les migrations avec un moteur asynchrone, sans pool de connexions."""
-    connectable = create_async_engine(
-        get_database_url(),
-        poolclass=pool.NullPool,
-        connect_args={"server_settings": {"lock_timeout": MIGRATION_LOCK_TIMEOUT}},
-    )
+    connectable = create_async_engine(get_database_url(), poolclass=pool.NullPool)
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

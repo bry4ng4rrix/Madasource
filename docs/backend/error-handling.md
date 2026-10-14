@@ -137,7 +137,7 @@ Règles :
 | Violation d'intégrité de la base | 409 seulement si le nom de la contrainte est connu et associé à un code (conventions de nommage, Jour 3). Sinon 500 `INTERNAL_ERROR`. |
 | SQLSTATE `40P01` (interblocage), `40001` (sérialisation, rare en READ COMMITTED), `55P03` (attente de verrou expirée) | 409 `CONCURRENT_MODIFICATION` |
 | SQLSTATE `57014` (requête annulée par `statement_timeout`) | 503 `SERVICE_UNAVAILABLE` |
-| Base de données injoignable | 503 `SERVICE_UNAVAILABLE`, avec `Retry-After: 5`. Jour 6 : connexion refusée ou délai dépassé (`ConnectionError`, `TimeoutError`, levés tels quels par asyncpg à l'ouverture d'une connexion) et SQLSTATE des classes 08, 28 (authentification), 3D (base absente), 53 (ressources) et 57P (arrêt du serveur) |
+| Base de données injoignable | 503 `SERVICE_UNAVAILABLE`, avec `Retry-After: 5`. Jour 6 : à l'ouverture d'une connexion, asyncpg lève des erreurs du système (refus, échec de toutes les adresses d'un hôte, nom introuvable, délai dépassé) que SQLAlchemy ne traduit pas ; un écouteur `do_connect` du moteur les convertit en `DatabaseUnavailableError` (`app/db/session.py`). La conversion est limitée à l'ouverture d'une connexion à la base : une erreur de fichier ou un délai dépassé ailleurs restent 500. Les SQLSTATE des classes 08, 28 (authentification), 3D (base absente), 53 (ressources) et 57P (arrêt du serveur) donnent aussi 503 |
 | Toute autre exception | 500 `INTERNAL_ERROR`, journalisée avec sa trace, jamais renvoyée au client |
 
 Remarques :

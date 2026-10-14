@@ -10,6 +10,7 @@ SQLAlchemy ne traduit pas. La conversion est limitée à l'ouverture d'une conne
 base : une erreur de fichier ou un délai dépassé ailleurs dans l'application restent 500.
 """
 
+import logging
 from collections.abc import AsyncIterator
 from typing import Annotated, Any
 
@@ -24,8 +25,11 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.config import Settings
 from app.core.exceptions import DEFAULT_RETRY_AFTER_SECONDS, ServiceUnavailableError
+from app.core.logging import summarize_exception
 
 APPLICATION_NAME = "madasource-backend"
+
+logger = logging.getLogger(__name__)
 
 
 class DatabaseUnavailableError(ServiceUnavailableError):
@@ -77,6 +81,12 @@ def _connect_or_unavailable(
     try:
         return dialect.connect(*cargs, **cparams)
     except OSError as exc:
+        # La cause reste journalisée (types et code errno, jamais le message, qui peut citer
+        # l'hôte) : refus, nom introuvable, délai et erreur TLS restent ainsi discernables.
+        logger.error(
+            "database_connect_failed",
+            extra={"errno": exc.errno, **summarize_exception(exc)},
+        )
         raise DatabaseUnavailableError() from exc
 
 
