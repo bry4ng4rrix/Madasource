@@ -96,7 +96,7 @@ Aucun fichier vide n'est créé pour un module futur (RJ section 2).
 
 1. **Reverse proxy** (production) : TLS, taille maximale de requête, en-têtes de sécurité.
 2. **Middlewares** : ASGI purs, pour s'appliquer aussi aux réponses d'erreur 500 (C31). Ils couvrent :
-   - l'identifiant de requête (`X-Request-ID`, conservé dans une variable de contexte lue par le gestionnaire d'erreurs) ;
+   - l'identifiant de requête (`X-Request-ID`) : placé dans `scope["state"]`, relu par le gestionnaire des erreurs 500 (C31), et dans une variable de contexte lue par les journaux ;
    - le journal d'accès ;
    - CORS ;
    - le marquage DEMO.
@@ -130,7 +130,7 @@ Aucun fichier vide n'est créé pour un module futur (RJ section 2).
 |---|---|---|
 | D-11 | Configuration lue depuis les variables d'environnement et validée au démarrage par un objet typé (Pydantic v2 et `pydantic-settings` 2.15.0, retenu au Jour 5 : bibliothèque de l'équipe Pydantic, lecture et validation typée des variables d'environnement ; `backend/app/core/config.py`). Une configuration invalide empêche le démarrage. | Proposé |
 | D-11 | Environnements : `local`, `test`, `staging` (si l'hébergement en prévoit un, Q-79), `production`, `demo` (section 8.2). | Proposé |
-| D-11 | En `production`, le démarrage est refusé si : mode debug actif, secret par défaut ou trop court, `DEMO_MODE` actif, origines CORS `*`, adaptateurs de démonstration chargés. | Proposé |
+| D-11 | En `production`, le démarrage est refusé si : mode debug actif, secret par défaut ou trop court, `DEMO_MODE` actif, origines CORS `*`, adaptateurs de démonstration chargés. **Jour 5** : implémenté dans `app/core/config.py` (origines `*` ou non HTTPS, `DEMO_MODE`, mot de passe d'exemple ou de moins de 12 caractères, `LOG_LEVEL=DEBUG`) ; `APP_ENV` obligatoire ; extension à `staging` et `demo` proposée (Q-102). | Proposé ; implémenté au Jour 5 |
 | D-11 | `.env` uniquement en local, jamais versionné. Toute variable est documentée dans `.env.example` avec une valeur factice (Jour 4). | Retenu (RJ section 1) |
 
 ## 7. Conventions transverses

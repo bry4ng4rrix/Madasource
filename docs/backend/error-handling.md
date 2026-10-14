@@ -1,6 +1,6 @@
 # Gestion des erreurs — backend MadaSource
 
-Jour 2 · 2026-10-12 · Statut : proposition à valider (décision D-24 de [architecture.md](architecture.md#12-registre-des-décisions)). Révisée après les revues `backend-architect` et `security-auditor` du Jour 2.
+Jour 2 · 2026-10-12 · **Implémenté au Jour 5** (2026-10-14) dans `backend/app/core/` (`exceptions.py`, `errors.py`) ; D-24 retenu ([architecture.md](architecture.md#12-registre-des-décisions)). Révisé après les revues `backend-architect` et `security-auditor` des Jours 2 et 5.
 
 ## 1. Objectifs
 
@@ -63,11 +63,11 @@ Une donnée d'entrée invalide (corps, paramètre de chemin ou de requête) prod
 
 | Règle | Statut |
 |---|---|
-| `field` : emplacement joint par des points, préfixé par `body`, `query` ou `path`. Un paramètre de requête inconnu donne `extra_forbidden` sur `query.<nom>` ([api-conventions.md](api-conventions.md#6-pagination-tri-et-filtres)). | Proposé |
-| `code` : type d'erreur de Pydantic (`missing`, `greater_than`, `string_too_short`, `extra_forbidden`…). | Proposé |
-| **La valeur saisie n'est jamais renvoyée.** Les erreurs de Pydantic contiennent la valeur fautive (`input`) : vérifié le 2026-10-12, un mot de passe trop court y apparaît en clair. Le gestionnaire par défaut de FastAPI relaie ces erreurs dans la réponse 422. Le gestionnaire MadaSource ne conserve que `field`, `code` et `message` ; il retire `input`, `ctx` et `url`. | Proposé (obligatoire pour la sécurité) |
-| Le message d'un validateur personnalisé ne cite jamais la valeur reçue ni une valeur cachée (seuil, plancher). | Proposé |
-| Une règle métier sur les données saisies (quantité sous le MOQ, catégorie désactivée, Incoterm non admis) renvoie aussi 422, mais avec son propre code (section 4). | Proposé |
+| `field` : emplacement joint par des points, préfixé par `body`, `query` ou `path`. Un paramètre de requête inconnu donne `extra_forbidden` sur `query.<nom>` ([api-conventions.md](api-conventions.md#6-pagination-tri-et-filtres)). | Retenu (Jour 5) |
+| `code` : type d'erreur de Pydantic (`missing`, `greater_than`, `string_too_short`, `extra_forbidden`…). | Retenu (Jour 5) |
+| **La valeur saisie n'est jamais renvoyée.** Les erreurs de Pydantic contiennent la valeur fautive (`input`) : vérifié le 2026-10-12, un mot de passe trop court y apparaît en clair. Le gestionnaire par défaut de FastAPI relaie ces erreurs dans la réponse 422. Le gestionnaire MadaSource ne conserve que `field`, `code` et `message` ; il retire `input`, `ctx` et `url`. | Retenu (Jour 5) |
+| Le message d'un validateur personnalisé ne cite jamais la valeur reçue ni une valeur cachée (seuil, plancher). Garde-fou du Jour 5 : un message qui contient la valeur saisie, ou dont le type d'erreur Pydantic recopie la saisie (`uuid_parsing`, `union_tag_invalid`, analyse de dates…), est remplacé par « Invalid value. ». | Retenu (Jour 5) |
+| Une règle métier sur les données saisies (quantité sous le MOQ, catégorie désactivée, Incoterm non admis) renvoie aussi 422, mais avec son propre code (section 4). | Retenu (Jour 5) |
 
 ## 4. Catalogue initial des codes
 
@@ -105,17 +105,19 @@ Le catalogue s'enrichit module par module. Un code n'est jamais réutilisé avec
 
 ## 5. Hiérarchie d'exceptions
 
-Proposée pour `app/core/exceptions.py` (implémentation au Jour 5) :
+Implémentée au Jour 5 dans `app/core/exceptions.py` :
 
 | Exception | HTTP | Usage |
 |---|---|---|
-| `AppError` (racine) | — | Porte `code`, `status`, `title`, `detail` et des extensions non sensibles, jamais de `Decimal` brut (D-14) |
+| `AppError` (racine) | 500 | Porte `status_code`, `code`, un `detail` facultatif et des en-têtes (`WWW-Authenticate`, `Retry-After`). Le `title` est calculé à partir du statut (D-24). Jamais de `Decimal` brut ni de donnée sensible (D-14) |
+| `BadRequestError` | 400 | Requête mal formée hors validation de schéma (`BAD_REQUEST`) |
 | `ValidationAppError` | 422 | Règle métier sur des données saisies |
 | `AuthenticationError` | 401 | Authentification absente ou invalide, ou ré-authentification exigée |
 | `PermissionDeniedError` | 403 | Action interdite (dont la séparation des tâches) |
 | `NotFoundError` | 404 | Ressource absente ou hors périmètre |
 | `ConflictError` | 409 | Conflit générique |
 | `InvalidStateTransitionError` | 409 | Transition refusée par une machine d'état |
+| `ConcurrentModificationError` | 409 | Interblocage, conflit de sérialisation ou attente de verrou expirée (`CONCURRENT_MODIFICATION`) |
 | `RateLimitedError` | 429 | Limite atteinte |
 | `ServiceUnavailableError` | 503 | Dépendance indisponible |
 
@@ -139,6 +141,10 @@ Règles :
 | Toute autre exception | 500 `INTERNAL_ERROR`, journalisée avec sa trace, jamais renvoyée au client |
 
 Remarques :
+- **Implémenté au Jour 5** (`app/core/errors.py`), testé dans `tests/api/test_errors.py` et `tests/api/test_logs.py`.
+- **Journal des erreurs 500** : aucun message d'exception. Ceux d'asyncpg recopient des lignes de la base (`DETAIL`), ceux d'une erreur de validation de réponse recopient les données servies. Sont journalisés : les types de la chaîne d'exceptions, les cadres de la pile (lignes de code), le SQLSTATE, le nom de contrainte, et, pour une validation, les emplacements et types d'erreur. Le doublon qu'uvicorn journaliserait après la réponse 500 est supprimé (filtre sur `uvicorn.error`).
+- **Exception au format unique** : une pré-vérification CORS refusée reçoit la réponse 400 `text/plain` de Starlette. Le protocole CORS ne l'expose pas au JavaScript du client ; elle porte malgré tout `X-Request-ID` et les en-têtes de sécurité.
+- **En-têtes transmis** d'une `HTTPException` du framework : seulement `Allow`, `Retry-After` et `WWW-Authenticate`, comparés sans tenir compte de la casse.
 - La lecture du code SQLSTATE dépend du pilote retenu (asyncpg, retenu au Jour 4, D-10). Elle est isolée dans le socle.
 - **Réponses 500** : une exception non gérée remonte jusqu'au middleware d'erreur serveur de Starlette, en dehors des autres middlewares. Les en-têtes ajoutés par ceux-ci (`X-Request-ID`, CORS) manqueraient donc, et un frontend d'une autre origine ne pourrait pas lire la réponse. Correctif proposé (C31, revue finale) :
   - un middleware ASGI pur, placé à l'extérieur, place l'identifiant de requête dans l'état de la requête (`scope["state"]`) plutôt que dans une variable de contexte, qui pourrait être réinitialisée en sortie de middleware ;

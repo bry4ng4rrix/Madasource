@@ -12,7 +12,6 @@ de la pile sont journalisés.
 """
 
 import logging
-import traceback
 from collections.abc import Iterable, Mapping, Sequence
 from http import HTTPStatus
 from typing import Any, Final, cast
@@ -27,6 +26,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import Settings
 from app.core.exceptions import AppError
+from app.core.logging import summarize_exception
 from app.core.middleware import (
     CORS_EXPOSED_HEADERS,
     apply_response_headers,
@@ -109,7 +109,7 @@ class ProblemDetails(BaseModel):
 # Réponse d'erreur documentée dans l'OpenAPI ; remplace le 422 par défaut de FastAPI.
 PROBLEM_RESPONSE_DOC: Final[dict[str, Any]] = {
     "model": ProblemDetails,
-    "content": {PROBLEM_CONTENT_TYPE: {}},
+    "content": {PROBLEM_CONTENT_TYPE: {"schema": {"$ref": "#/components/schemas/ProblemDetails"}}},
 }
 
 
@@ -186,17 +186,7 @@ def _constraint_name(exc: DBAPIError) -> str | None:
 
 def exception_summary(exc: BaseException) -> dict[str, Any]:
     """Résumé journalisable d'une exception, sans aucun message d'exception."""
-    chain: list[str] = []
-    seen: set[int] = set()
-    current: BaseException | None = exc
-    while current is not None and id(current) not in seen:
-        seen.add(id(current))
-        chain.append(f"{type(current).__module__}.{type(current).__qualname__}")
-        current = current.__cause__ or current.__context__
-    summary: dict[str, Any] = {
-        "exception_types": chain,
-        "stack": traceback.format_list(traceback.extract_tb(exc.__traceback__)),
-    }
+    summary = summarize_exception(exc)
     if isinstance(exc, DBAPIError):
         summary["sqlstate"] = sqlstate_of(exc)
         summary["constraint"] = _constraint_name(exc)
@@ -295,9 +285,17 @@ def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
             # Contrainte non associée à un code connu, ou erreur imprévue : 500 sans détail.
             # Cette réponse traverse encore les middlewares (CORS, en-têtes) : pas d'ajout ici.
             return _internal_error_response(request, database_error)
-        logger.warning(
+        logger.log(
+            logging.ERROR if status >= 500 else logging.WARNING,
             "database_error",
-            extra={"code": code, "sqlstate": sqlstate, "request_id": _request_id(request)},
+            extra={
+                "code": code,
+                "status": status,
+                "sqlstate": sqlstate,
+                "method": request.method,
+                "path": request.url.path,
+                "request_id": _request_id(request),
+            },
         )
         return problem_response(request, status=status, code=code)
 

@@ -52,7 +52,8 @@ def test_ready_documents_its_problem_response(client: TestClient) -> None:
     schema = client.get("/api/v1/openapi.json").json()
     responses = schema["paths"]["/api/v1/health/ready"]["get"]["responses"]
 
-    assert "application/problem+json" in responses["503"]["content"]
+    problem = responses["503"]["content"]["application/problem+json"]
+    assert problem["schema"] == {"$ref": "#/components/schemas/ProblemDetails"}
 
 
 def test_production_does_not_serve_openapi_or_docs() -> None:
@@ -85,5 +86,6 @@ def test_validation_errors_are_documented_as_problem_details(app: FastAPI) -> No
         api_router.routes.pop()
 
     responses = schema["paths"]["/api/v1/_test/create"]["post"]["responses"]
-    assert "application/problem+json" in responses["422"]["content"]
+    problem = responses["422"]["content"]["application/problem+json"]
+    assert problem["schema"] == {"$ref": "#/components/schemas/ProblemDetails"}
     assert "HTTPValidationError" not in schema.get("components", {}).get("schemas", {})

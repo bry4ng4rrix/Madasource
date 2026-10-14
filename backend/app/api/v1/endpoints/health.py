@@ -16,7 +16,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.core.config import Settings
-from app.core.errors import PROBLEM_CONTENT_TYPE, ProblemDetails
+from app.core.errors import PROBLEM_RESPONSE_DOC
 from app.core.exceptions import ServiceUnavailableError
 
 logger = logging.getLogger(__name__)
@@ -51,9 +51,8 @@ async def live() -> LivenessStatus:
     summary="Sonde de disponibilité : la base de données répond",
     responses={
         503: {
-            "model": ProblemDetails,
+            **PROBLEM_RESPONSE_DOC,
             "description": "Base de données indisponible (`SERVICE_UNAVAILABLE`).",
-            "content": {PROBLEM_CONTENT_TYPE: {}},
         }
     },
 )

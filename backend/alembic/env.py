@@ -15,6 +15,8 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
+from app.core.config import parse_database_url
+
 config = context.config
 
 if config.config_file_name is not None:
@@ -25,10 +27,15 @@ target_metadata = None
 
 
 def get_database_url() -> str:
-    """Renvoie l'URL de la base, ou échoue clairement si elle n'est pas définie."""
+    """Renvoie l'URL de la base, ou échoue clairement sans jamais en citer une partie."""
     url = os.environ.get("DATABASE_URL")
     if not url:
         raise RuntimeError("DATABASE_URL n'est pas définie : voir .env.example.")
+    try:
+        parse_database_url(url)
+    except ValueError as exc:
+        # Message fixe : jamais un fragment de l'URL, qui contient le mot de passe.
+        raise RuntimeError(str(exc)) from None
     return url
 
 

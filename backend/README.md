@@ -87,7 +87,7 @@ Toutes sont documentées dans `.env.example` (racine), avec des valeurs factices
 
 | Variable | Usage |
 |---|---|
-| `APP_ENV` | `local`, `test`, `staging`, `production`, `demo` (D-11) |
+| `APP_ENV` | **Obligatoire** : `local`, `test`, `staging`, `production`, `demo` (D-11) |
 | `DATABASE_URL` | URL `postgresql+asyncpg://…` (obligatoire) |
 | `LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `CORS_ALLOWED_ORIGINS` | Origines autorisées, séparées par des virgules |
@@ -97,7 +97,9 @@ Toutes sont documentées dans `.env.example` (racine), avec des valeurs factices
 | `POSTGRES_TEST_PASSWORD`, `TEST_DATABASE_URL` | Base de test éphémère |
 | `MADASOURCE_DB_HOST_PORT`, `MADASOURCE_API_HOST_PORT`, `MADASOURCE_TEST_DB_HOST_PORT` | Ports de l'hôte |
 
-En `production`, le démarrage est refusé si : origine CORS `*` ou non HTTPS, `DEMO_MODE` actif, mot de passe d'exemple de `.env.example`. La documentation interactive y est désactivée.
+Garde-fous au démarrage : en `staging`, `production` et `demo`, refus d'une origine CORS `*`, du mot de passe d'exemple de `.env.example` et d'un mot de passe de base de moins de 12 caractères (extension à `staging` et `demo` à valider, Q-102) ; en `production`, refus en plus des origines non HTTPS et de `LOG_LEVEL=DEBUG`. La documentation interactive est désactivée en `production` et en `demo`.
+
+Depuis le Jour 5, `.env` doit aussi définir `POSTGRES_TEST_PASSWORD` (et `TEST_DATABASE_URL`) : Compose exige cette variable pour toute commande, même sans le profil `test`. Un `.env` copié avant le Jour 5 est à compléter à partir de `.env.example`.
 
 ## Dépendances
 

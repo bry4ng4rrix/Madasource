@@ -1,8 +1,9 @@
 # Jour 4 — Initialisation du dépôt
 
-Date : 2026-10-13 · Statut : **TERMINÉ AVEC RÉSERVES**. Réserves :
-- **Docker non vérifié** : l'utilisateur a autorisé les téléchargements Python, pas ceux des images Docker. Le Dockerfile et `docker-compose.yml` sont écrits, et la syntaxe de Compose est validée ; ni build ni démarrage n'ont été faits ;
-- **le dépôt GitHub est public** (constaté ce jour, R-26, Q-71) : action de l'utilisateur requise.
+Date : 2026-10-13 · Statut : **TERMINÉ AVEC RÉSERVES**. Réserve restante :
+- **le dépôt GitHub est public** (constaté ce jour, R-26, Q-71) : action de l'utilisateur requise. L'utilisateur a demandé de passer au Jour 5 ; la question reste ouverte.
+
+Réserve **levée le 2026-10-13**, au début du Jour 5 : Docker. L'utilisateur a autorisé le téléchargement des images ; build, démarrage, santé, connexion d'Alembic et persistance du volume sont vérifiés (section « Vérification finale »).
 
 ## Objectif du jour
 
@@ -100,13 +101,33 @@ Conséquences proposées :
 
 ## Vérification finale
 
-À compléter avec le résultat de la revue contradictoire.
+**Revue contradictoire** (workflow : trois relecteurs, infrastructure, outillage Python et documentation ; un vérificateur sceptique par dimension) : 14 constats proposés, 11 confirmés (1 important, 10 mineurs), 3 réfutés. Tous corrigés le 2026-10-13 :
+- **important** : D-24 (forme du `type` des erreurs) n'était pas signalé alors qu'il devait être tranché avant le Jour 5. L'utilisateur l'a tranché au début du Jour 5 : `about:blank` ;
+- **mineurs** :
+  - `.env.example` : `DATABASE_URL` reprend `POSTGRES_*` et le port, d'où un commentaire « à modifier ensemble » ; utilisateur limité aux lettres et chiffres ;
+  - route Swagger `/docs/oauth2-redirect` hors de `/api/v1`, corrigée dans la fabrique du Jour 5, avec un test sur toutes les routes ;
+  - `.claude/settings.local.json` ajouté au `.gitignore` du dépôt ;
+  - documents périmés : `security-design.md` §17, `testing-strategy.md` §3, `indexes-and-constraints.md`, `dependency-graph.md`, Q-71 et l'en-tête des risques ;
+  - mypy repassé à « Proposé » (aucune validation de l'utilisateur) ; définition de « Retenu » étendue aux choix explicites de l'utilisateur ;
+  - SRC-13 statué (roadmap non déplacée, fichier local) ; Q-79 reportée à l'Audit D, sans effet sur le Jour 4.
+
+**Vérification Docker** (2026-10-13, images autorisées au début du Jour 5) :
+
+| Commande | Résultat |
+|---|---|
+| `docker compose --env-file .env.example up -d --build` | Images téléchargées, image `madasource-backend` construite (270 Mo) ; `db` puis `backend` « healthy » |
+| `curl http://127.0.0.1:8001/api/v1/health/live` | 200 `{"status":"ok"}` |
+| `docker exec madasource-backend-1 id` ; `touch /app/app/x` | `uid=10001(app)` ; écriture refusée (code en lecture seule) ; aucun `__pycache__` local copié |
+| `alembic current`, dans le conteneur et depuis l'hôte | Connexion asyncpg à PostgreSQL 18 réussie, code 0 |
+| `docker compose down` (sans `-v`), puis `up -d` | Volume `madasource_pgdata` conservé ; PostgreSQL : « Database directory appears to contain a database; Skipping initialization » |
+
+Hook de Claude Code : au Jour 5, l'auto-test `.claude/tests/test_hooks.py` a révélé un cas devenu dépendant du poste depuis la création de `backend/.venv` (le hook préfère le Ruff du projet au faux binaire du test). Le test a été isolé dans un projet temporaire ; assertion inchangée ; 0 échec.
 
 ## Critères de sortie
 
 | Critère (roadmap §5) | État |
 |---|---|
-| Périmètre implémenté et cohérent | **Partiel** : squelette, versions épinglées, application, test smoke et Compose écrits ; démarrage par Compose **non vérifié** (images non autorisées) |
+| Périmètre implémenté et cohérent | Oui : squelette, versions épinglées, application, test smoke, Compose ; démarrage par Compose vérifié le 2026-10-13 (section « Vérification finale ») |
 | Tests appropriés et résultat connu | Oui : 4 tests, 4 réussis, y compris depuis une copie propre |
 | Migrations et contraintes cohérentes | Sans objet (aucune migration) ; Alembic configuré, gabarit testé |
 | Documentation et `.env.example` à jour | Oui |
@@ -119,17 +140,18 @@ Conséquences proposées :
 | Sujet | Échéance |
 |---|---|
 | **Q-71 : passer le dépôt GitHub en privé** ; le cahier des charges et la conception de sécurité y sont publics | **Immédiat** |
-| Autoriser le téléchargement des images Docker (`postgres:18.6-trixie`, `python:3.14.8-slim-trixie`, `ghcr.io/astral-sh/uv:0.13.0`) pour vérifier Compose | Avant le Jour 5, qui teste la disponibilité de la base |
-| Garder ou retirer `/hello` : hors du préfixe `/api/v1` (`api-conventions.md`) et hors du périmètre de la roadmap | Avant le Jour 5 |
+| ~~Téléchargement des images Docker~~ | Autorisé le 2026-10-13 (début du Jour 5) |
+| ~~`/hello`~~ | Retiré à la demande de l'utilisateur (Jour 5) |
+| ~~D-24, forme du `type` des erreurs~~ | Tranché : `about:blank` (Jour 5) |
+| mypy comme vérificateur de types | Proposé ; à confirmer |
 | D-15 : UUIDv7 généré par l'application | Jour 6 |
 | Décisions du Jour 3 en attente, dont **Q-82** (Trade) | Voir `day-03.md` |
 
 ## Risques et limites
 
-- **Docker non vérifié** : une erreur de build ou de démarrage reste possible (chemins, permissions UID 10001, healthchecks). Revue statique seulement.
 - **Dépôt public** : tout fichier poussé est lisible par tous, historique compris.
 - **Versions récentes** : Starlette 1.7 a déjà rendu `httpx` obsolète ; d'autres changements de ce type sont possibles. Le filtre `filterwarnings = error` les révélera dès qu'ils apparaîtront.
-- **Base de données** : aucune connexion réelle n'a été testée (pas de PostgreSQL du projet démarré). Le PostgreSQL natif du poste (port 5432) appartient à d'autres projets et n'a pas été utilisé.
+- **Base de données** : le PostgreSQL natif du poste (port 5432) appartient à d'autres projets et n'a jamais été utilisé ; seules les bases de Compose le sont.
 
 ## Préparation du Jour 5 (non exécuté)
 

@@ -3,6 +3,7 @@
 import json
 import logging
 import sys
+from datetime import UTC, datetime
 
 import pytest
 
@@ -56,16 +57,46 @@ def test_request_id_from_context_is_added() -> None:
     assert line["request_id"] == "0199f2a4-0000-7000-8000-000000000001"
 
 
-def test_exception_is_formatted() -> None:
+def test_exception_is_summarized_without_its_message() -> None:
+    # Valeur construite à l'exécution : la pile reprend les lignes de code, pas les valeurs.
+    row = "-".join(["secret", "row", "value"])
     try:
-        raise RuntimeError("boom")
+        raise RuntimeError(f"DETAIL: Failing row contains ({row})")
     except RuntimeError:
         record = logging.makeLogRecord({"msg": "failed", "levelname": "ERROR"})
         record.exc_info = sys.exc_info()
 
-    line = json.loads(JsonFormatter().format(record))
+    text = JsonFormatter().format(record)
+    line = json.loads(text)
 
-    assert "RuntimeError: boom" in line["exception"]
+    assert line["exception_types"] == ["builtins.RuntimeError"]
+    assert line["stack"]
+    assert "exception" not in line
+    assert "secret-row-value" not in text
+
+
+def test_sanitize_keeps_identifiers_readable_and_hides_amounts() -> None:
+    from decimal import Decimal
+    from enum import StrEnum
+    from uuid import UUID
+
+    class Status(StrEnum):
+        ACTIVE = "ACTIVE"
+
+    identifier = UUID("0199f2a4-1c44-7a51-8f0e-9a7d2b3c1e55")
+    instant = datetime(2026, 10, 14, 8, 0, tzinfo=UTC)
+
+    assert sanitize("organization_id", identifier) == str(identifier)
+    assert sanitize("at", instant) == "2026-10-14T08:00:00+00:00"
+    assert sanitize("status", Status.ACTIVE) == "ACTIVE"
+    assert sanitize("margin", Decimal("1250.00")) == "<Decimal>"
+
+
+def test_sanitize_masks_key_value_pairs() -> None:
+    assert sanitize("headers", [("authorization", "Bearer abc"), ("accept", "json")]) == [
+        REDACTED,
+        "json",
+    ]
 
 
 def test_uvicorn_color_message_is_dropped() -> None:

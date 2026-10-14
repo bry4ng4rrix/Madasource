@@ -9,8 +9,11 @@ personnelle ni de composante de prix ; on journalise des identifiants.
 import json
 import logging
 import sys
+import traceback
+import uuid
 from contextvars import ContextVar
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+from enum import Enum
 from typing import Any, TextIO
 
 # Identifiant de la requête en cours, posé par le middleware de contexte de requête.
@@ -55,11 +58,43 @@ def sanitize(key: str, value: Any) -> Any:
         return REDACTED
     if value is None or isinstance(value, str | int | float | bool):
         return value
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, datetime | date):
+        return value.isoformat()
+    if isinstance(value, Enum):
+        return sanitize(key, value.value)
     if isinstance(value, dict):
         return {str(k): sanitize(str(k), v) for k, v in value.items()}
     if isinstance(value, list | tuple | set | frozenset):
-        return [sanitize(key, item) for item in value]
+        # Une paire (clé, valeur) est traitée comme une entrée de dictionnaire.
+        return [
+            sanitize(item[0], item[1])
+            if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str)
+            else sanitize(key, item)
+            for item in value
+        ]
+    # Decimal (composantes de prix, D-12) et tout autre objet : seulement le nom du type.
     return f"<{type(value).__name__}>"
+
+
+def summarize_exception(exc: BaseException) -> dict[str, Any]:
+    """Types de la chaîne d'exceptions et cadres de la pile, sans aucun message.
+
+    Les messages d'exception peuvent recopier des données (lignes de la base, contenu
+    d'une réponse, URL) : ils ne sont jamais journalisés.
+    """
+    chain: list[str] = []
+    seen: set[int] = set()
+    current: BaseException | None = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        chain.append(f"{type(current).__module__}.{type(current).__qualname__}")
+        current = current.__cause__ or current.__context__
+    return {
+        "exception_types": chain,
+        "stack": traceback.format_list(traceback.extract_tb(exc.__traceback__)),
+    }
 
 
 class JsonFormatter(logging.Formatter):
@@ -79,8 +114,9 @@ class JsonFormatter(logging.Formatter):
         for key, value in record.__dict__.items():
             if key not in _RECORD_ATTRIBUTES and key != "request_id" and not key.startswith("_"):
                 payload[key] = sanitize(key, value)
-        if record.exc_info:
-            payload["exception"] = self.formatException(record.exc_info)
+        # Trace d'un journal tiers (`exc_info=True`) : types et pile, jamais le message.
+        if record.exc_info and record.exc_info[1] is not None:
+            payload.update(summarize_exception(record.exc_info[1]))
         return json.dumps(payload, default=str, ensure_ascii=False)
 
 

@@ -62,7 +62,7 @@ Fixtures communes (`backend/tests/conftest.py`), proposées :
 
 | Fixture | Rôle |
 |---|---|
-| `test_settings` | Configuration de test (garde-fou de la section 4) |
+| `settings`, `db_settings` | Configuration explicite, sans dépendre de l'environnement (`tests/support.py`, `make_settings`) ; `db_settings` vise la base de test, avec le garde-fou de la section 4 |
 | `db_engine`, `db_session` | Moteur et session isolée par test |
 | `app`, `client` | Application construite par la factory, client HTTP en mémoire |
 | `clock` | Horloge contrôlable |

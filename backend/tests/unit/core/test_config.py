@@ -192,3 +192,19 @@ def test_production_refuses_debug_logs() -> None:
             cors_allowed_origins=("https://app.example.com",),
             log_level="DEBUG",
         )
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql+asyncpg://madasource:Pass@Tail@db.example.com/madasource",
+        "postgresql+asyncpg://madasource:S3cr@ss:word@db.example.com:5432/madasource",
+    ],
+)
+def test_unencoded_at_sign_in_password_is_refused(url: str) -> None:
+    with pytest.raises(ValidationError) as excinfo:
+        make_settings(database_url=url)
+
+    assert "n'est pas une URL" in str(excinfo.value)
+    assert "Tail" not in str(excinfo.value)
+    assert "word" not in str(excinfo.value)

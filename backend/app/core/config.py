@@ -33,14 +33,25 @@ DOCS_ENVIRONMENTS: frozenset[str] = frozenset({"local", "test", "staging"})
 _INVALID_URL_MESSAGE = "DATABASE_URL n'est pas une URL de base de données valide."
 
 
-def _parse_url(value: SecretStr) -> URL:
-    """Analyse l'URL sans jamais laisser passer un message qui en citerait une partie."""
+def parse_database_url(raw: str) -> URL:
+    """Analyse une URL de base sans jamais laisser passer un message qui en citerait une partie.
+
+    Utilisée par la configuration et par Alembic. Un mot de passe contenant « @ » ou « : »
+    fait échouer l'analyse du port par une ValueError dont le message cite la fin de l'URL
+    (constat E1) ; sans port, la fin du mot de passe glisserait dans l'hôte. Les deux cas
+    sont refusés avec un message fixe : encoder ces caractères (%40, %3A).
+    """
     try:
-        return make_url(value.get_secret_value())
+        url = make_url(raw)
     except ArgumentError, ValueError, TypeError:
-        # Un mot de passe contenant « @ » ou « : » fait échouer l'analyse du port par une
-        # ValueError dont le message cite la fin de l'URL : il est remplacé (constat E1).
         raise ValueError(_INVALID_URL_MESSAGE) from None
+    if url.host is not None and "@" in url.host:
+        raise ValueError(_INVALID_URL_MESSAGE)
+    return url
+
+
+def _parse_url(value: SecretStr) -> URL:
+    return parse_database_url(value.get_secret_value())
 
 
 class Settings(BaseSettings):

@@ -161,9 +161,9 @@ def test_configure_logging_redirects_uvicorn_once() -> None:
 
 
 def test_sanitize_walks_sequences_and_hides_objects() -> None:
-    assert sanitize("items", [{"password": "p1"}, ("ok", {"token": "t"})]) == [
+    assert sanitize("items", [{"password": "p1"}, ("ok", 1, {"token": "t"})]) == [
         {"password": "[REDACTED]"},
-        ["ok", {"token": "[REDACTED]"}],
+        ["ok", 1, {"token": "[REDACTED]"}],
     ]
     assert sanitize("settings", make_settings()) == "<Settings>"
 
@@ -180,3 +180,25 @@ def test_application_logs_never_reveal_the_database_password(
 
     formatter = JsonFormatter()
     assert all("VerySecretPw42" not in formatter.format(r) for r in caplog.records)
+
+
+def test_database_unavailability_is_logged_as_error(
+    app: FastAPI, caplog: pytest.LogCaptureFixture
+) -> None:
+    class _Lost(Exception):
+        sqlstate = "08006"
+
+    async def lost() -> None:
+        raise DBAPIError("SELECT 1", None, _Lost("connection lost to db.internal"))
+
+    app.add_api_route("/api/v1/_test/lost", lost, methods=["GET"])
+    caplog.set_level(logging.INFO, logger="app.errors")
+    with TestClient(app, raise_server_exceptions=False) as test_client:
+        response = test_client.get("/api/v1/_test/lost")
+
+    assert response.status_code == 503
+    [line] = _formatted(caplog, "app.errors")
+    entry = json.loads(line)
+    assert entry["level"] == "ERROR"
+    assert entry["path"] == "/api/v1/_test/lost"
+    assert "db.internal" not in line

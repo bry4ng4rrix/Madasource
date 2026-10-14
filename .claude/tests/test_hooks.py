@@ -94,13 +94,14 @@ def main() -> int:
         ok = code == 0 and ((expected_hint in context) if expected_hint else not data)
         report(ok, f"post  rappel={expected_hint} :: {rel}")
 
-    # Chemin Ruff : faux binaire qui signale une erreur de lint.
-    with tempfile.TemporaryDirectory() as fakebin:
+    # Chemin Ruff : faux binaire qui signale une erreur de lint. Le projet simulé n'a pas de
+    # backend/.venv : le hook y préférerait son Ruff au faux binaire du PATH (Jour 4).
+    with tempfile.TemporaryDirectory() as fakebin, tempfile.TemporaryDirectory() as fake_project:
         fake = Path(fakebin) / "ruff"
         fake.write_text("#!/bin/sh\nif [ \"$1\" = check ]; then echo 'x.py:1:1: F401 unused import'; exit 1; fi\nexit 0\n")
         fake.chmod(0o755)
-        env = {**ENV, "PATH": f"{fakebin}:{os.environ.get('PATH', '')}"}
-        with tempfile.NamedTemporaryFile(suffix=".py", dir=Path(__file__).parent) as tmp_py:
+        env = {**ENV, "CLAUDE_PROJECT_DIR": fake_project, "PATH": f"{fakebin}:{os.environ.get('PATH', '')}"}
+        with tempfile.NamedTemporaryFile(suffix=".py", dir=fake_project) as tmp_py:
             code, _, data = run("post_edit.py", {"tool_name": "Write", "tool_input": {"file_path": tmp_py.name}}, env)
             report(code == 0 and data.get("decision") == "block" and "F401" in data.get("reason", ""),
                    "post  Ruff simulé → erreurs renvoyées à Claude")
