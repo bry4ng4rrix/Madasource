@@ -240,7 +240,7 @@ Classée V1 (A), mais prévue par aucun jour de la roadmap backend (SRC-18). Pla
 | D-02 | API REST versionnée sous `/api/v1`, documentée par OpenAPI | Retenu | RJ section 1, CdC §56 |
 | D-03 | Structure RJ section 2 avec écarts déclarés : `integrations/`, `wiring.py`, `contracts.py`, `projections.py`, `ports.py` (deux modules) ; santé et routers des modules de niveau 1 à 3 dans `api/v1/endpoints/` ; dossier `tests/e2e` | Proposé | C24, revue finale |
 | D-04 | Couches d'un module : router, schemas, service, contracts, repository, models, permissions | Retenu / Proposé | RJ section 1-2 |
-| D-05 | Modules ordonnés en niveaux, dépendances uniquement vers les niveaux inférieurs, contrôle automatique en CI | Proposé | [module-boundaries.md](module-boundaries.md) |
+| D-05 | Modules ordonnés en niveaux, dépendances uniquement vers les niveaux inférieurs, contrôle automatique en CI | Proposé ; contrôle en place au Jour 7 (import-linter, test d'architecture) | [module-boundaries.md](module-boundaries.md) §9 |
 | D-06 | Communication par appels descendants ; deux ports seulement (P-01, P-03) ; pas de bus d'événements en V1 | Proposé | C35 |
 | D-07 | Pas de relation ORM entre modules ; clés étrangères seulement vers un module inférieur, par nom de table | Proposé | C12 |
 | D-08 | Une transaction par cas d'usage, validée par le service avant la réponse ; DTO entre modules ; horodatages fixés par l'application | Proposé | C15, C19, C20 |
@@ -329,7 +329,10 @@ Le CdC §77 (point 2) demande une recommandation de stack. La roadmap l'impose (
 | Alembic | Retenu | Migrations versionnées, relues, réversibles |
 | Pytest | Retenu | Fixtures adaptées aux bases de test isolées et aux tests paramétrés (machines d'état) |
 | Ruff | Retenu | Lint et formatage rapides, un seul outil |
-| mypy | Proposé (Jour 4), à confirmer | Vérification de types en mode strict, avec le greffon Pydantic ; SQLAlchemy 2 est typé nativement |
+| mypy | Retenu (choix de l'utilisateur, Jour 7, 2026-10-14) | Vérification de types en mode strict, avec le greffon Pydantic ; SQLAlchemy 2 est typé nativement |
+| import-linter | Proposé ; en place au Jour 7 | Contrôle automatique des couches et des niveaux de modules (D-05) |
+| GitHub Actions | Retenu (Jour 7 ; dépôt GitHub de l'utilisateur) | CI à chaque push et pull request, avec les commandes du `Makefile` ; aucun déploiement |
+| gitleaks | Retenu (choix de l'utilisateur, Jour 7) | Recherche de secrets dans tout l'historique Git, en CI ; binaire officiel vérifié par sa somme SHA-256 |
 | Docker Compose | Retenu | Environnement reproductible (backend et PostgreSQL), aligné avec la CI |
 | uv | Retenu (Jour 4, version 0.13.0 imposée par `required-version`) | Verrouillage reproductible des dépendances (`uv.lock`) ; gestion des versions de Python |
 | Redis, Celery | Non retenus au départ (D-20) | À introduire seulement si un besoin est démontré (Jour 31, limites de débit partagées au Jour 8) |

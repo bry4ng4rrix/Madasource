@@ -410,6 +410,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "grimp" },
     { name = "httpx2" },
     { name = "import-linter" },
     { name = "mypy" },
@@ -431,6 +432,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "grimp", specifier = "==3.17" },
     { name = "httpx2", specifier = "==2.13.1" },
     { name = "import-linter", specifier = "==2.15" },
     { name = "mypy", specifier = "==2.4.0" },

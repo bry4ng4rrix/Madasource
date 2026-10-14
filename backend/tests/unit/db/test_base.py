@@ -1,6 +1,8 @@
 """Base déclarative : convention de nommage, types par défaut, identifiants UUIDv7."""
 
+import sys
 import uuid
+from collections.abc import Iterator
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
@@ -120,6 +122,17 @@ def test_constraint_and_index_names_fit_postgresql_and_are_unique() -> None:
     assert len(names) == len(set(names))
 
 
+@pytest.fixture
+def forget_probe_packages() -> Iterator[None]:
+    """Retire de `sys.modules` les paquets fabriqués importés par le test."""
+    before = set(sys.modules)
+    yield
+    for name in set(sys.modules) - before:
+        if name.partition(".")[0].startswith("probe_"):
+            del sys.modules[name]
+
+
+@pytest.mark.usefixtures("forget_probe_packages")
 def test_registry_imports_models_of_every_module(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -138,12 +151,14 @@ def test_registry_imports_models_of_every_module(
     assert registry.import_all_models() == ["probe_modules.alpha.models"]
 
 
-def test_registry_without_modules_package(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_registry_requires_the_modules_package(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(registry, "MODULES_PACKAGE", "probe_package_that_does_not_exist")
 
-    assert registry.import_all_models() == []
+    with pytest.raises(ModuleNotFoundError, match="probe_package_that_does_not_exist"):
+        registry.import_all_models()
 
 
+@pytest.mark.usefixtures("forget_probe_packages")
 def test_registry_does_not_hide_errors_inside_a_models_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

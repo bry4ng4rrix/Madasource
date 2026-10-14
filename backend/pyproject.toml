@@ -23,6 +23,7 @@ dev = [
     "ruff==0.17.0",
     "mypy==2.4.0",
     "import-linter==2.15",
+    "grimp==3.17",
     "pytest-cov==7.1.0",
 ]
 
@@ -89,7 +90,8 @@ type = "layers"
 # Les noms entre parenthèses sont facultatifs : contrôlés dès qu'ils existent.
 layers = [
     "app.main",
-    "app.api",
+    # Racine de composition (module-boundaries.md §5.2), indépendante de la couche HTTP.
+    "(app.wiring) | app.api",
     "(app.modules)",
     "(app.integrations)",
     "(app.common)",
@@ -150,5 +152,5 @@ branch = true
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
-# Seuil minimal : sous ce taux, la suite échoue (97 % mesurés au Jour 7).
+# Seuil minimal : sous ce taux, la suite échoue (99,08 % mesurés au Jour 7 ; seuil : Q-104).
 fail_under = 95

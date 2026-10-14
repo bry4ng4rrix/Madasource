@@ -14,17 +14,19 @@ Ce dépôt contient pour l'instant **le backend seulement** : une API REST FastA
 | `docker-compose.yml` | Environnement local : PostgreSQL 18, backend, base de test éphémère |
 | [`infrastructure/postgres/`](infrastructure/postgres/) | Script de création du rôle applicatif `madasource_app` |
 | `.env.example` | Modèle des variables d'environnement (valeurs factices) |
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | Intégration continue : qualité, tests et migrations, Docker, recherche de secrets |
 | `check.md` | Suivi d'avancement, jour par jour |
 
 ## Démarrage
 
-Prérequis : Python 3.14, uv 0.13.0, Docker avec Compose. Installation, tests, serveur local, migrations et Docker Compose : **[`backend/README.md`](backend/README.md)**, seule source de vérité des commandes.
+Prérequis : Python 3.14, uv 0.13.0, Docker avec Compose, GNU Make. Installation, contrôles (`make check`), tests, serveur local, migrations et Docker Compose : **[`backend/README.md`](backend/README.md)**, seule source de vérité des commandes.
 
 ## État
 
-Jour 6 de la roadmap backend : fondation de l'API (configuration validée, sondes, erreurs Problem Details, journaux JSON, CORS), base déclarative, migrations Alembic, deux rôles PostgreSQL, base de test isolée. Aucun workflow métier ni table métier n'est encore implémenté. Avancement détaillé : [`check.md`](check.md).
+Jour 7 de la roadmap backend : fondation de l'API (configuration validée, sondes, erreurs Problem Details, journaux JSON, CORS), base déclarative, migrations Alembic, deux rôles PostgreSQL, base de test isolée, contrôles reproductibles et intégration continue GitHub Actions. Aucun workflow métier ni table métier n'est encore implémenté. Avancement détaillé : [`check.md`](check.md).
 
 ## Sécurité
 
 - Aucun secret n'est versionné : seul `.env.example`, avec des valeurs factices. `.env` est ignoré par Git.
-- Aucun déploiement en production n'est configuré à ce stade.
+- La CI recherche les secrets dans tout l'historique Git (gitleaks) et refuse tout fichier `.env` suivi.
+- Aucun déploiement en production n'est configuré à ce stade ; la CI ne publie ni image ni artefact.

@@ -39,7 +39,7 @@ Dépendances de développement à justifier et épingler au Jour 4.
 | Lanceur | `pytest` | Imposé par la stack (RJ section 1) |
 | Tests asynchrones | **Plugin pytest d'AnyIO** (backend asyncio seul), retenu au Jour 5 | AnyIO est déjà une dépendance de Starlette et FastAPI : pas de paquet supplémentaire |
 | Client HTTP de test | `httpx2` (Jour 4) : Starlette 1.7 rend `httpx` obsolète pour son `TestClient`, voir `backend/README.md`. `TestClient`, ou `AsyncClient` et transport ASGI | Appelle l'application en mémoire, sans serveur. Le transport ASGI de httpx **n'exécute pas** le cycle de démarrage et d'arrêt (lifespan) : les fixtures le déclenchent explicitement. |
-| Couverture | `pytest-cov` | Mesure et rapport en CI |
+| Couverture | `pytest-cov` 7.1.0, retenu au Jour 7 | Mesure des lignes et des branches, seuil bloquant (section 10) |
 | Données de test | Fonctions de fabrication écrites dans le projet (pas de bibliothèque) | Pas de dépendance ; données explicites |
 | Temps | Horloge injectable (D-13), sans bibliothèque de gel du temps | Dates contrôlées sans modifier l'horloge du système |
 
@@ -47,7 +47,7 @@ Dépendances de développement à justifier et épingler au Jour 4.
 
 | Règle | Statut |
 |---|---|
-| Base dédiée, dont le nom se termine par `_test` (par exemple `madasource_test`), servie par un **PostgreSQL éphémère** : un conteneur de test dont les données vivent en mémoire (tmpfs) et repartent vides à chaque démarrage en local, et le service PostgreSQL éphémère de la CI (Jour 7). Aucune base persistante n'est donc jamais supprimée ni réinitialisée par les tests (CLAUDE.md). Même version majeure de PostgreSQL qu'en production. | Proposé (C33) |
+| Base dédiée, dont le nom se termine par `_test` (par exemple `madasource_test`), servie par un **PostgreSQL éphémère** : un conteneur de test dont les données vivent en mémoire (tmpfs) et repartent vides à chaque démarrage. La CI démarre le même service Compose, avec les valeurs factices de `.env.example`. Aucune base persistante n'est donc jamais supprimée ni réinitialisée par les tests (CLAUDE.md). Même version majeure de PostgreSQL qu'en production. | **Implémenté** : en local au Jour 5, en CI au Jour 7 (job `tests`, `backend/README.md`) |
 | **Garde-fou** : la configuration de test refuse de démarrer si l'environnement n'est pas `test` ou si le nom de la base ne se termine pas par `_test`. Aucun test ne peut toucher la base de développement. | **Implémenté au Jour 5** : service Compose `db-test` (profil `test`, `tmpfs`, port 5434), `TEST_DATABASE_URL`, contrôle dans `Settings` |
 | Schéma créé une fois par session de tests par `alembic upgrade head` sur cette base vide, ce qui teste aussi les migrations. Jamais par `create_all`. Une réinitialisation d'une base de test persistante, si elle devenait nécessaire, serait une exception explicite à faire valider par l'utilisateur. | **Implémenté au Jour 6** (`migrated_test_database`, avec le propriétaire du schéma ; l'application teste avec `madasource_app`) |
 | **Isolation par test** : chaque test s'exécute dans une transaction externe annulée à la fin. La session applicative y travaille par points de sauvegarde (mode « rejoindre une transaction externe » de SQLAlchemy 2.x, `join_transaction_mode="create_savepoint"`). Les commits des services n'en sortent jamais. | **Implémenté au Jour 6** (`db_connection`, `db_session`, `api` : la vraie dépendance de session est conservée, seule sa fabrique rejoint la transaction externe ; l'identifiant de la transaction externe ne change jamais pendant un test, ce qui est vérifié). Limites : une seule connexion par test, donc pas de requêtes simultanées dans un même test ; les tests de migration modifient la base partagée par la session, donc pas d'exécution parallèle (pytest-xdist) ; la transaction externe est fermée par le serveur après 60 s d'inactivité (`idle_in_transaction_session_timeout`) : une pause plus longue au débogueur fait échouer le test |
@@ -135,27 +135,28 @@ Deux garde-fous complémentaires, contre le risque R-01 et les fuites de donnée
 | Test | Fréquence |
 |---|---|
 | `alembic upgrade head` sur une base vide | Chaque exécution de la suite (section 4) |
-| Aucun écart entre modèles et migrations (`alembic check`) | CI |
-| Dernière révision : `downgrade -1` puis `upgrade head`, sur la base de test uniquement | CI |
+| Montée par la commande `alembic` elle-même, sur une base vide, puis aucun écart (`make migrations-check`) | CI, avant les tests (Jour 7) |
+| Aucun écart entre modèles et migrations (`alembic check`) | Chaque exécution de la suite (`test_migrations.py`), donc en CI |
+| Dernière révision : `downgrade -1` puis `upgrade head`, sur la base de test uniquement | Chaque exécution de la suite, donc en CI |
 | Migration de données : test dédié avec un jeu de données de départ | Au cas par cas |
 
 ## 9. Commandes
 
-Les commandes définitives seront fixées aux Jours 4 à 7 dans `backend/README.md`. Proposition, depuis `backend/` :
+Fixées au Jour 7 : cibles de `backend/Makefile`, décrites dans `backend/README.md` (source de vérité). En résumé, depuis `backend/` :
 
 | Usage | Commande |
 |---|---|
-| Rapide (sans base) | `uv run pytest -m unit -q` |
-| Complète | `uv run pytest -q` (base de test démarrée) |
-| Un module | `uv run pytest tests -k rfqs -q` |
-| Couverture | `uv run pytest --cov=app --cov-report=term-missing` |
+| Contrôles statiques et tests sans base | `make check` |
+| Suite complète avec couverture (base de test démarrée) | `make test ENV_FILE=../.env` |
+| Un module | `uv run --env-file ../.env pytest tests -k rfqs -q` |
 
-En CI (Jour 7) : lint, format, vérification de types, suite complète avec PostgreSQL éphémère, contrôle des migrations, build Docker. Aucun contrôle n'est rendu facultatif.
+La CI (`.github/workflows/ci.yml`) exécute les mêmes cibles : lint, format, vérification de types, frontières de l'architecture, suite complète avec PostgreSQL éphémère et couverture, contrôle des migrations, build Docker, recherche de secrets. Aucun contrôle n'est facultatif : un job en échec fait échouer la CI.
 
 ## 10. Couverture
 
-- Mesurée et publiée à chaque exécution en CI.
-- Proposition : bloquer la CI en dessous de 85 % de lignes couvertes sur `app/modules/`. Seuil `À VALIDER` au Jour 7.
+- Mesurée à chaque exécution de `make test`, en local et en CI. Le rapport est affiché dans le journal du job ; il n'est envoyé à aucun service externe.
+- Proposition du Jour 2 : bloquer la CI sous 85 % de lignes couvertes sur `app/modules/`.
+- **Appliqué au Jour 7, `À VALIDER` (Q-104)** : échec sous **95 %**, lignes et branches, sur tout `app/` (`fail_under` dans `pyproject.toml`). `app/modules/` ne contient encore aucun code : un seuil limité à ce dossier ne mesurerait rien. Mesure au Jour 7 : 99,08 %. Le seuil n'est jamais abaissé pour obtenir une CI verte.
 - La couverture est un indicateur, pas un objectif : un test sans assertion utile ne compte pas.
 
 ## 11. Données de test

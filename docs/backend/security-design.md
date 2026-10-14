@@ -241,10 +241,11 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 | Règle | Statut |
 |---|---|
 | Secrets uniquement dans les variables d'environnement ou le gestionnaire de secrets de l'hébergeur (Q-79). Jamais dans Git, une image Docker, un journal ou la configuration CI en clair. | Retenu (RJ section 1) |
-| `.gitignore` : `.env`, `.env.*` (sauf `.env.example`), environnements virtuels et `.claude/settings.local.json` exclus depuis le Jour 4 (R-20 clos). Contrôle « aucun `.env` suivi » en CI au Jour 7. | Retenu (Jour 4) |
+| `.gitignore` : `.env`, `.env.*` (sauf `.env.example`), environnements virtuels et `.claude/settings.local.json` exclus depuis le Jour 4 (R-20 clos). Contrôle « aucun `.env` suivi » en CI depuis le Jour 7 (job `secrets`). | Retenu (Jour 4) ; contrôle CI implémenté (Jour 7) |
 | Le cahier des charges est versionné et poussé sur le dépôt distant. `CLAUDE.md`, `roadmap.md` et `roadmap_backend_fastapi.md` ont été retirés de l'index le 2026-10-12 (commit f598049), mais ils restent dans l'**historique** poussé (commit c6e27d8). **Dépôt constaté public le 2026-10-13** : passage en privé requis, par l'utilisateur (R-26, Q-71). Retirer des fichiers de l'historique serait une opération destructive : seulement avec l'accord explicite de l'utilisateur, et sans effet sur les clones existants. | À VALIDER |
 | Procédure de rotation documentée (Audit D). Une rotation de la clé de signature invalide les jetons en cours ; la rotation de la clé de chiffrement bancaire impose un rechiffrement (Q-81). | Proposé |
-| Détection de secrets : hook local (`guard_files.py`) et analyse en CI (outil à justifier au Jour 7). Contrôle CI : aucun `.env` suivi. | Proposé |
+| Détection de secrets : hook local (`guard_files.py`) et, en CI, **gitleaks** 8.30.1 sur tout l'historique Git, valeurs masquées dans le rapport (`--redact`). Binaire officiel vérifié par sa somme SHA-256 ; aucune liste d'exceptions (`.gitleaks.toml`) n'est nécessaire au Jour 7. Contrôle CI : aucun `.env` suivi. | **Implémenté** (Jour 7 ; gitleaks : choix de l'utilisateur) |
+| CI sans secret ni privilège : jeton GitHub en lecture seule, identifiants Git non conservés, pas de `pull_request_target`, aucun secret GitHub utilisé, aucune publication. Actions tierces épinglées par empreinte de commit, outils et images vérifiés par empreinte ; une version publiée depuis moins de 14 jours n'est pas retenue (Q-104). Tant que le dépôt est public (Q-71), les journaux de CI le sont aussi : ils ne contiennent que des valeurs factices. | **Implémenté** (Jour 7) |
 
 ## 18. Journalisation et audit
 

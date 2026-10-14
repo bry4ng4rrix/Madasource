@@ -2,8 +2,9 @@
 
 Chaque module métier déclare ses tables dans `app/modules/<module>/models.py`. Importer
 ces fichiers enregistre leurs tables dans `Base.metadata` ; l'autogénération d'Alembic
-compare ensuite ces métadonnées à la base. Aucun module n'existe au Jour 6 : la liste
-des modules importés est vide, et c'est attendu.
+compare ensuite ces métadonnées à la base. Aucun module métier n'existe encore : la liste
+des modules importés est vide, et c'est attendu. Le paquet `app.modules` lui-même est
+obligatoire (contrat `modules` d'import-linter) : son absence est une erreur.
 """
 
 import importlib
@@ -19,12 +20,7 @@ MODULES_PACKAGE = "app.modules"
 
 def import_all_models() -> list[str]:
     """Importe tous les `app.modules.<module>.models` existants ; renvoie leurs noms."""
-    try:
-        package = importlib.import_module(MODULES_PACKAGE)
-    except ModuleNotFoundError as exc:
-        if exc.name != MODULES_PACKAGE:
-            raise
-        return []
+    package = importlib.import_module(MODULES_PACKAGE)
     imported: list[str] = []
     for module in sorted(pkgutil.iter_modules(package.__path__), key=lambda m: m.name):
         if not module.ispkg:

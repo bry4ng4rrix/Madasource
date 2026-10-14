@@ -277,4 +277,4 @@ Réponse `201`, en-tête `Location: /api/v1/rfqs/0199…` :
 - Écarts de nommage avec le CdC §56 (section 3).
 - Visibilité des résultats de matching (Q-31) et des coûts externes (Q-04).
 - Référentiels pays et ports (UN/LOCODE) : source et mise à jour.
-- Emplacement des dépendances HTTP d'`access_control` ([module-boundaries.md](module-boundaries.md) §4, Jour 7).
+- Emplacement des dépendances HTTP d'`access_control` : proposition du Jour 7 dans [module-boundaries.md](module-boundaries.md) §4, à valider au Jour 9.

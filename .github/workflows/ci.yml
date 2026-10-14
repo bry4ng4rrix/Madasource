@@ -1,0 +1,124 @@
+# Intégration continue (Jour 7). Les contrôles du backend sont les cibles de backend/Makefile,
+# documentées dans backend/README.md ; seuls les contrôles du dépôt entier (Compose, secrets)
+# sont écrits ici.
+#
+# - Actions tierces épinglées par empreinte de commit (version entre parenthèses) ; outils
+#   téléchargés vérifiés par leur somme SHA-256.
+# - Droits du jeton en lecture seule, identifiants Git non conservés après le checkout.
+# - Aucun secret : la base de test est éphémère, sur le runner, avec les valeurs factices de
+#   .env.example. Aucune image n'est publiée, rien n'est déployé.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.13.0"
+  # Somme officielle de uv-x86_64-unknown-linux-gnu.tar.gz (release 0.13.0).
+  UV_SHA256: "1468ebd5a5541121837c5a2817b9972ba6090fa6caa3d142620850a47fb75154"
+  PYTHON_VERSION: "3.14.8"
+
+jobs:
+  quality:
+    name: Lint, formatage, types, frontières
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          checksum: ${{ env.UV_SHA256 }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          working-directory: backend
+      - name: Dépendances (uv.lock, sans résolution)
+        run: make -C backend install
+      - name: Ruff, mypy, import-linter, cohérence de uv.lock
+        run: make -C backend quality
+
+  tests:
+    name: Migrations et tests (PostgreSQL éphémère)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          checksum: ${{ env.UV_SHA256 }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          working-directory: backend
+      - name: URL de la base de test (valeurs factices de .env.example)
+        run: |
+          pattern='^(TEST_DATABASE_URL|TEST_MIGRATION_DATABASE_URL)='
+          test "$(grep -cE "$pattern" .env.example)" -eq 2
+          grep -E "$pattern" .env.example >> "$GITHUB_ENV"
+      - name: Base de test éphémère (service db-test, en mémoire)
+        run: docker compose --env-file .env.example --profile test up --detach --wait db-test
+      - name: Dépendances (uv.lock, sans résolution)
+        run: make -C backend install
+      - name: Migrations depuis une base vide, puis absence d'écart avec les modèles
+        run: MIGRATION_DATABASE_URL="$TEST_MIGRATION_DATABASE_URL" make -C backend migrations-check
+      - name: Suite complète avec couverture (seuil dans pyproject.toml)
+        run: make -C backend test
+      - name: Journaux de la base de test
+        if: failure()
+        run: docker compose --env-file .env.example --profile test logs db-test
+
+  docker:
+    name: Docker (Compose et image)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Configuration Docker Compose valide
+        run: |
+          docker compose --env-file .env.example config --quiet
+          docker compose --env-file .env.example --profile test config --quiet
+      - name: Image du backend (construite, jamais publiée)
+        run: make -C backend docker-build
+
+  secrets:
+    name: Recherche de secrets (gitleaks)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: "8.30.1"
+      # Somme officielle de gitleaks_8.30.1_linux_x64.tar.gz (fichier checksums de la release).
+      GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Aucun fichier .env suivi par Git (seuls les .env.example le sont)
+        run: |
+          tracked="$(git ls-files -- ':(glob)**/.env' ':(glob)**/.env.*' ':(exclude,glob)**/.env.example')"
+          if [ -n "$tracked" ]; then
+            echo "::error::Fichiers .env suivis par Git : $tracked"
+            exit 1
+          fi
+      - name: gitleaks (binaire officiel, somme vérifiée)
+        run: |
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL --proto '=https' --tlsv1.2 -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$archive" | sha256sum --check --strict
+          mkdir "$RUNNER_TEMP/gitleaks"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/gitleaks" gitleaks
+      - name: Historique Git complet (valeurs masquées dans le rapport)
+        run: '"$RUNNER_TEMP/gitleaks/gitleaks" git --redact --no-banner --verbose .'

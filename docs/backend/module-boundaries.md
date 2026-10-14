@@ -141,6 +141,7 @@ Si Q-53 décide que les échantillons utilisent les Payment Records ou les expé
 
 - Rien n'importe un `router.py` ou un fichier de `app/api/`, sauf `app/api/v1/router.py`.
 - Les routers des modules de niveau 1 à 3 (`audit`, `auth`, `organizations`) sont placés dans la **couche HTTP**, `app/api/v1/endpoints/`, prévue par RJ section 2 au-dessus des modules. Ils peuvent ainsi utiliser les dépendances FastAPI d'`access_control` (acteur courant, `require_permission`) sans import montant : aucune exception au contrôle automatique n'est nécessaire (section 9). Les modules de niveau 4 et plus gardent leur `router.py`, qui importe `access_control` vers le bas.
+- **Proposition du Jour 7, à valider au Jour 9** (création d'`access_control`) : les dépendances FastAPI d'`access_control` sont dans `app/modules/access_control/dependencies.py`. Elles ne peuvent pas être dans `app/api/`, que les modules, situés en dessous, n'ont pas le droit d'importer (section 9). Seuls les `router.py` des autres modules et `app/api/` importent ce fichier ; le test d'architecture sera étendu au Jour 9 pour autoriser ce seul cas.
 - Le router d'un module n'appelle que le service de son module.
 - Un module peut déclarer des sous-ressources sous le chemin d'une ressource d'un module **inférieur**. Exemples :
   - `quotations` déclare `/rfq-inbox/{rfq_id}/quotes` ;
@@ -284,7 +285,8 @@ Chaque cas d'usage verrouille selon D-09 : `FOR NO KEY UPDATE` avec `populate_ex
 
 | Contrôle | Moment | Statut |
 |---|---|---|
-| Contrats `import-linter` (outil à justifier au Jour 7) :<br>- contrat de **couches** : `app.api` au-dessus des modules, puis modules par niveau, puis socle ordonné. Il vérifie aussi les imports indirects ; aucune exception n'est nécessaire, car les routers des niveaux 1 à 3 sont dans `app.api` (section 4) ;<br>- contrats d'**indépendance** par niveau ;<br>- contrats d'**interdiction** : seuls `service`, `contracts` et `projections` d'un autre module sont importables. | Jour 7 | Proposé (C23) |
+| Contrats `import-linter` 2.15 (`pyproject.toml`, `make imports`) ; ils vérifient aussi les imports indirects :<br>- contrat **`socle`** : `app.main`, puis `app.api`, puis les modules, puis le socle dans l'ordre `integrations`, `common`, `db`, `core` (couches facultatives tant qu'elles n'existent pas). Aucune exception : les routers des niveaux 1 à 3 sont dans `app.api` (section 4) ;<br>- contrat **`modules`** : les 23 modules de la section 3, un niveau par couche. Des modules de même niveau sont **indépendants** (séparateur `\|`). `exhaustive = true` : un module absent du contrat fait échouer le contrôle, donc tout nouveau module reçoit un niveau.<br>Test d'architecture (`tests/architecture/test_boundaries.py`, outil `grimp`, moteur d'import-linter) : seuls `service`, `contracts`, `projections` et **`ports`** d'un autre module sont importables. `ports` est ajouté à la liste du Jour 2 : la section 5.2 fait déclarer un port par le module inférieur, implémenter par les modules supérieurs et utiliser par `documents` et `messages`. Les niveaux sont lus dans le contrat `modules`, seule source de vérité. | Jour 7 | **Implémenté** ; ajout de `ports` à valider (Q-104). Chaque règle est vérifiée sur un cas fabriqué qui la viole |
+| Test des clés étrangères (D-07) : aucune ne pointe vers une table d'un module de niveau supérieur. | Jour 7 | **Implémenté** (même fichier) ; sans objet tant qu'aucune table métier n'existe |
 | Liste de contrôle de la revue (`code-review-madasource`) :<br>- accès aux internes d'un autre module ;<br>- `relationship()` inter-modules ;<br>- commit dans une fonction appelée par un autre module ;<br>- objet ORM renvoyé hors du module ;<br>- union de schémas de réponse ;<br>- écriture de sécurité dans la transaction principale. | Dès le Jour 5 | Proposé |
 | Test du comportement par défaut de chaque port (P-01 refuse, P-03 sans effet) et du branchement des implémentations des modules actifs. | Dès le premier port | Proposé (C9) |
 
@@ -296,6 +298,7 @@ Chaque cas d'usage verrouille selon D-09 : `FOR NO KEY UPDATE` avec `populate_ex
 - Inclusion de la performance historique dans `matching` (Q-32).
 - Module `favorites` si Q-63 retient les favoris (section 2).
 - Effet d'un échec du matching à la soumission (Q-24, Q-31).
+- Emplacement des dépendances HTTP d'`access_control` : proposition en section 4, à valider au Jour 9.
 
 ## 11. Ordre de construction
 

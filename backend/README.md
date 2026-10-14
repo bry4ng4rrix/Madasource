@@ -1,6 +1,6 @@
 # Backend MadaSource
 
-API REST FastAPI de MadaSource (monolithe modulaire). État au Jour 6 : fondation de l'application (configuration validée, fabrique d'application, routeur `/api/v1`, sondes de santé, erreurs au format Problem Details, journaux JSON, CORS), base déclarative SQLAlchemy, migrations Alembic, deux rôles PostgreSQL et base de test isolée ; aucune table métier.
+API REST FastAPI de MadaSource (monolithe modulaire). État au Jour 7 : fondation de l'application (configuration validée, fabrique d'application, routeur `/api/v1`, sondes de santé, erreurs au format Problem Details, journaux JSON, CORS), base déclarative SQLAlchemy, migrations Alembic, deux rôles PostgreSQL et base de test isolée, commandes de contrôle reproductibles et intégration continue ; aucune table métier.
 
 Ce fichier est la **source de vérité des commandes** du backend. Les autres documents, y compris les skills de Claude Code, renvoient ici.
 
@@ -11,6 +11,7 @@ Ce fichier est la **source de vérité des commandes** du backend. Les autres do
 | Python | 3.14 (`.python-version`) | Exécution (D-27) |
 | uv | 0.13.0 (imposée par `required-version` dans `pyproject.toml`) | Environnement virtuel et dépendances, à partir de `uv.lock` |
 | Docker et Docker Compose | Docker 29, Compose 5 (versions du poste de développement) | PostgreSQL 18, base de test, backend en conteneur |
+| GNU Make | 4.4 (poste de développement) | Point d'entrée des contrôles (`Makefile`), le même en local et en CI |
 
 ## Installation
 
@@ -28,25 +29,55 @@ Rien ne charge `.env` automatiquement : l'option `--env-file ../.env` de `uv run
 
 ## Commandes officielles
 
-Depuis `backend/` :
+Point d'entrée unique : `backend/Makefile`, exécuté tel quel par la CI (section suivante). Depuis `backend/` ; `make help` liste les cibles.
 
-| Contrôle | Commande |
-|---|---|
-| Verrou à jour | `uv lock --check` |
-| Lint | `uv run ruff check .` |
-| Format (vérification) | `uv run ruff format --check .` |
-| Types | `uv run mypy` (mode strict ; fichiers déclarés dans `pyproject.toml`) |
-| Base de test (avant les tests) | `docker compose --profile test up -d db-test` (depuis la racine) |
-| Tests : suite complète | `uv run --env-file ../.env pytest` |
-| Tests sans base | `uv run pytest -m "not integration"` (sélection, pas la suite complète) |
-| Serveur local | `uv run --env-file ../.env uvicorn --factory app.main:create_app --reload --port 8002 --no-access-log --no-server-header` |
-| Migrations | voir la section « Migrations » ci-dessous |
+| Contrôle | Commande | Exécute |
+|---|---|---|
+| Installation | `make install` | `uv sync --locked` |
+| Verrou à jour | `make lock-check` | `uv lock --check` |
+| Lint | `make lint` | `ruff check .` |
+| Format (vérification) | `make format-check` | `ruff format --check .` |
+| Types | `make types` | `mypy` (mode strict ; fichiers déclarés dans `pyproject.toml`) |
+| Frontières de l'architecture | `make imports` | `lint-imports` (contrats de `pyproject.toml`, `module-boundaries.md` §9) |
+| Contrôles statiques | `make quality` | les cinq lignes précédentes |
+| Tests sans base | `make test-fast` | `pytest -m "not integration"` (sélection, pas la suite complète) |
+| Contrôles rapides | `make check` | `quality`, puis `test-fast` |
+| Base de test (avant les tests) | `docker compose --profile test up -d --wait db-test` (depuis la racine) | |
+| Tests : suite complète | `make test ENV_FILE=../.env` | `pytest --cov` : échec si la couverture de `app/` (lignes et branches) passe sous 95 % (Q-104) |
+| Migrations | `make migrations-check ENV_FILE=../.env` | `alembic upgrade head`, puis `alembic check`, sur la base de `MIGRATION_DATABASE_URL` |
+| Image Docker | `make docker-build` | `docker build`, sans envoi vers un registre, puis contrôle de l'utilisateur de l'image (`10001:10001`) |
+| Serveur local | `uv run --env-file ../.env uvicorn --factory app.main:create_app --reload --port 8002 --no-access-log --no-server-header` | |
+
+Chaque cible passe par `uv run --locked`, qui refuse un `uv.lock` périmé. `ENV_FILE` transmet le fichier à `uv run --env-file` ; une variable déjà présente dans l'environnement l'emporte sur le fichier (vérifié avec uv 0.13.0). Sans `ENV_FILE`, les variables viennent de l'environnement : c'est le cas en CI.
+
+`make migrations-check ENV_FILE=../.env` applique les migrations en attente à la base de **développement** (`MIGRATION_DATABASE_URL`). Pour viser la base de test, comme la CI, définir `MIGRATION_DATABASE_URL` avec la valeur de `TEST_MIGRATION_DATABASE_URL`, par exemple sous fish : `env MIGRATION_DATABASE_URL=<URL de test> make migrations-check`.
 
 Points de fonctionnement :
 - **tests** : marqueurs `unit` (sans base ni HTTP), `api` (client HTTP en mémoire, sans base), `integration` (base de test). Tout avertissement est traité comme une erreur (`filterwarnings = error`). Sans `TEST_DATABASE_URL` et `TEST_MIGRATION_DATABASE_URL`, les tests d'intégration **échouent** avec la marche à suivre : ils ne sont jamais ignorés ;
 - **base de test** : service `db-test` (profil `test`), données en mémoire (`tmpfs`), vides à chaque démarrage, port hôte 5434. Le schéma y est créé une fois par session de tests par `alembic upgrade head` (propriétaire du schéma) ; l'application s'y connecte avec le rôle applicatif ; chaque test d'intégration travaille dans une transaction annulée à la fin, la session de requête la rejoignant par points de sauvegarde. La configuration de test refuse toute base dont le nom ne se termine pas par `_test`. Jamais la base de développement ;
 - **serveur** : `--factory` appelle `create_app()`, qui lit et valide la configuration ; `--no-access-log` laisse un seul journal d'accès, celui de l'application (D-12) ; `--no-server-header` retire la bannière `server: uvicorn` ;
 - **base de données** : deux rôles. L'application utilise `madasource_app` (`DATABASE_URL`) : lecture et écriture des données, aucun droit sur le schéma. Alembic utilise le propriétaire du schéma (`MIGRATION_DATABASE_URL`). Une connexion refusée, un délai dépassé ou une authentification refusée donnent 503 `SERVICE_UNAVAILABLE`, jamais 500.
+
+## Intégration continue
+
+Workflow `.github/workflows/ci.yml`, déclenché à chaque `push` et `pull_request`. Quatre jobs indépendants sur `ubuntu-24.04` :
+
+| Job | Contenu |
+|---|---|
+| `quality` | `make install`, puis `make quality` |
+| `tests` | service `db-test` démarré par Docker Compose avec les valeurs factices de `.env.example` (base en mémoire, vide) ; `make migrations-check` sur cette base, depuis une base vide ; `make test` (suite complète et seuil de couverture) |
+| `docker` | `docker compose config` (avec et sans le profil `test`) ; `make docker-build` |
+| `secrets` | aucun fichier `.env` suivi par Git ; gitleaks 8.30.1 sur tout l'historique Git, valeurs masquées (`--redact`) |
+
+Garde-fous :
+- jeton GitHub en lecture seule (`permissions: contents: read`), identifiants Git non conservés après le checkout (`persist-credentials: false`), pas de déclencheur `pull_request_target` ;
+- aucun secret GitHub n'est utilisé : la base de test est éphémère, sur le runner, avec les valeurs factices de `.env.example` ; aucune image n'est publiée, rien n'est déployé ;
+- actions tierces épinglées par empreinte de commit : `actions/checkout` v7.0.1, `astral-sh/setup-uv` v10.2.0 ; uv 0.13.0 et gitleaks 8.30.1 vérifiés par leur somme SHA-256 ; images Docker épinglées par empreinte (`Dockerfile`, `docker-compose.yml`) ;
+- délai de carence : une version publiée depuis moins de 14 jours n'est pas retenue (setup-uv v10.3.0, publiée le 2026-10-09, écartée au Jour 7 ; Q-104).
+
+Mise à jour d'une version épinglée : relever l'empreinte du commit de l'étiquette (`git ls-remote https://github.com/<dépôt> refs/tags/<version>` ; pour une étiquette annotée, la ligne `^{}`) ou la somme publiée avec la release, la reporter avec la version en commentaire, puis rejouer les jobs en local (commandes ci-dessus).
+
+Tant que le dépôt est public (Q-71), les journaux des jobs le sont aussi : ils ne contiennent que des valeurs factices et des rapports masqués.
 
 ## Migrations
 
@@ -134,7 +165,7 @@ Compose exige ses variables pour toute commande, même sans le profil `test`. Un
 
 ## Dépendances
 
-Versions épinglées exactement dans `pyproject.toml` ; dépendances transitives figées par `uv.lock`.
+Versions épinglées exactement dans `pyproject.toml` ; dépendances transitives figées par `uv.lock`. Hors Python, la CI utilise gitleaks 8.30.1 (binaire officiel, somme vérifiée, licence MIT ; choix de l'utilisateur, Jour 7) : il n'est pas installé sur le poste.
 
 | Paquet | Version | Justification |
 |---|---|---|
@@ -148,7 +179,10 @@ Versions épinglées exactement dans `pyproject.toml` ; dépendances transitives
 | `pytest` (dev) | 9.1.1 | Tests (stack imposée) ; tests asynchrones par le plugin d'AnyIO, déjà installé avec Starlette |
 | `httpx2` (dev) | 2.13.1 | Client HTTP du `TestClient` de Starlette. Starlette 1.7 rend obsolète l'usage de `httpx` au profit de `httpx2`, publié par l'auteur de `httpx` (dépôt `pydantic/httpx2`) |
 | `ruff` (dev) | 0.17.0 | Lint et formatage (stack imposée) |
-| `mypy` (dev) | 2.4.0 | Vérification de types, en mode strict, avec le greffon Pydantic |
+| `mypy` (dev) | 2.4.0 | Vérification de types, en mode strict, avec le greffon Pydantic (choix de l'utilisateur, Jour 7) |
+| `import-linter` (dev) | 2.15 | Contrôle automatique des couches et des niveaux de modules (D-05, `module-boundaries.md` §9), imports indirects compris. Licence BSD-2-Clause |
+| `grimp` (dev) | 3.17 | Graphe d'imports, moteur d'import-linter, utilisé directement par le test d'architecture (interface publique des modules) : déclaré explicitement plutôt que pris comme dépendance transitive. Même auteur, licence BSD-2-Clause |
+| `pytest-cov` (dev) | 7.1.0 | Mesure de la couverture (lignes et branches) et seuil bloquant (`testing-strategy.md` §10). Licence MIT ; apporte `coverage` (Apache-2.0) |
 
 ## Structure
 
@@ -159,16 +193,19 @@ backend/
 │   ├── api/v1/router.py        routeur /api/v1
 │   ├── api/v1/endpoints/       health.py (sondes)
 │   ├── core/                   config.py, exceptions.py, errors.py (Problem Details), logging.py, middleware.py
-│   └── db/                     base.py (base déclarative, nommage, UUIDv7), registry.py (découverte des
-│                               modèles), roles.py (rôle applicatif), session.py (moteur, DbSession)
+│   ├── db/                     base.py (base déclarative, nommage, UUIDv7), registry.py (découverte des
+│   │                           modèles), roles.py (rôle applicatif), session.py (moteur, DbSession)
+│   └── modules/                paquet conteneur des modules métier (vide au Jour 7)
 ├── alembic/                    env.py asynchrone ; versions/ : socle des droits sur le schéma (Jour 6)
 ├── tests/
 │   ├── unit/                   configuration, journaux, exceptions, base déclarative
 │   ├── api/                    sondes, erreurs, middlewares, OpenAPI, journaux (sans base)
 │   ├── integration/            base de test : migrations, droits du rôle applicatif, sessions, sondes
+│   ├── architecture/           frontières entre modules : interface publique, clés étrangères (Jour 7)
 │   ├── conftest.py, support.py fixtures et configuration de test explicite
 ├── alembic.ini
 ├── Dockerfile                  multi-étapes, UID 10001 non root, uv sync --locked --no-dev, uvicorn --factory
+├── Makefile                    commandes officielles, utilisées aussi par la CI
 ├── pyproject.toml
 ├── uv.lock
 └── .python-version

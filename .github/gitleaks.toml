@@ -1,0 +1,31 @@
+# Configuration de gitleaks pour la CI (docs/backend/security-design.md §17).
+#
+# Passée explicitement (--config) : un .gitleaks.toml ajouté à la racine n'a aucun effet.
+# La CI ignore aussi les fichiers .gitleaksignore et les commentaires gitleaks:allow.
+# Toute exception ajoutée ici est une décision, consignée dans security-design.md §17.
+
+title = "MadaSource"
+
+# Les règles par défaut de gitleaks 8.30.1, complétées ci-dessous.
+[extend]
+useDefault = true
+
+# Aucune règle par défaut ne vise un mot de passe dans une URL (DATABASE_URL, par exemple).
+[[rules]]
+id = "url-credentials"
+description = "Mot de passe dans une URL (schéma://utilisateur:mot de passe@hôte)"
+regex = '''(?i)\b[a-z][a-z0-9+.\-]*://[^\s:/@'"]+:([^\s:/@'"]{8,})@'''
+secretGroup = 1
+keywords = ["://"]
+
+[[rules.allowlists]]
+description = "Valeurs factices : préfixe changeme (.env.example), refusé par la configuration en staging, production et demo"
+regexTarget = "secret"
+regexes = ['''^changeme''']
+
+[[rules.allowlists]]
+description = "Valeurs factices des tests de configuration et de journalisation, déjà dans l'historique"
+condition = "AND"
+paths = ['''^backend/tests/''']
+regexTarget = "secret"
+regexes = ['''^(?:StrongValue42(?:xyz)?|SuperSecret1|VerySecretPw42|\{password\})$''']
