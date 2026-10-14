@@ -11,6 +11,9 @@ from http import HTTPStatus
 from types import MappingProxyType
 from typing import ClassVar
 
+# Délai conseillé au client avant une nouvelle tentative, quand une dépendance est indisponible.
+DEFAULT_RETRY_AFTER_SECONDS = 5
+
 
 class AppError(Exception):
     """Racine des erreurs de l'application : un statut HTTP et un code stable."""

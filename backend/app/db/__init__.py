@@ -1,1 +1,1 @@
-"""Accès à la base de données : moteur, sessions (base déclarative au Jour 6)."""
+"""Accès à la base de données : base déclarative, découverte des modèles, rôles, sessions."""

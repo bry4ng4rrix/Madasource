@@ -11,7 +11,8 @@ Ce dépôt contient pour l'instant **le backend seulement** : une API REST FastA
 | [`backend/`](backend/) | API FastAPI : code, tests, migrations, Dockerfile |
 | [`docs/backend/`](docs/backend/) | Spécifications, architecture, modèle de données, sécurité, rapports journaliers |
 | [`docs/decisions/`](docs/decisions/) | Registre des décisions issues des questions au client |
-| `docker-compose.yml` | Environnement local : PostgreSQL 18 et backend |
+| `docker-compose.yml` | Environnement local : PostgreSQL 18, backend, base de test éphémère |
+| [`infrastructure/postgres/`](infrastructure/postgres/) | Script de création du rôle applicatif `madasource_app` |
 | `.env.example` | Modèle des variables d'environnement (valeurs factices) |
 | `check.md` | Suivi d'avancement, jour par jour |
 
@@ -21,7 +22,7 @@ Prérequis : Python 3.14, uv 0.13.0, Docker avec Compose. Installation, tests, s
 
 ## État
 
-Jour 5 de la roadmap backend : fondation de l'API (configuration validée, sondes `GET /api/v1/health/live` et `/ready`, erreurs au format Problem Details, journaux JSON, CORS). Aucun workflow métier n'est encore implémenté. Docker Compose vérifié le 2026-10-13. Avancement détaillé : [`check.md`](check.md).
+Jour 6 de la roadmap backend : fondation de l'API (configuration validée, sondes, erreurs Problem Details, journaux JSON, CORS), base déclarative, migrations Alembic, deux rôles PostgreSQL, base de test isolée. Aucun workflow métier ni table métier n'est encore implémenté. Avancement détaillé : [`check.md`](check.md).
 
 ## Sécurité
 

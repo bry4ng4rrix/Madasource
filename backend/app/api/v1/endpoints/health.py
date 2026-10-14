@@ -17,14 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.core.config import Settings
 from app.core.errors import PROBLEM_RESPONSE_DOC
-from app.core.exceptions import ServiceUnavailableError
+from app.core.exceptions import DEFAULT_RETRY_AFTER_SECONDS, ServiceUnavailableError
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/health", tags=["health"])
-
-# Délai conseillé au client avant une nouvelle tentative, en secondes.
-READINESS_RETRY_AFTER_SECONDS = 5
 
 
 class LivenessStatus(BaseModel):
@@ -63,10 +60,10 @@ async def ready(request: Request) -> ReadinessStatus:
         async with asyncio.timeout(settings.readiness_timeout_seconds):
             async with engine.connect() as connection:
                 await connection.execute(text("SELECT 1"))
-    except (SQLAlchemyError, OSError, TimeoutError) as exc:
+    except (SQLAlchemyError, OSError, ServiceUnavailableError) as exc:
         # Le type d'erreur suffit au diagnostic ; le message pourrait contenir l'hôte.
         logger.warning("readiness_check_failed", extra={"error_type": type(exc).__name__})
         raise ServiceUnavailableError(
-            "The database is not available.", retry_after=READINESS_RETRY_AFTER_SECONDS
+            "The database is not available.", retry_after=DEFAULT_RETRY_AFTER_SECONDS
         ) from None
     return ReadinessStatus(status="ok", database="ok")

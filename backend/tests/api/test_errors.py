@@ -6,10 +6,12 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from starlette.exceptions import HTTPException
 
 from app.core import exceptions
+from app.db.session import DbSession
 from tests.support import ALLOWED_ORIGIN
 
 pytestmark = pytest.mark.api
@@ -243,3 +245,18 @@ def test_uuid_parsing_error_does_not_echo_the_input(app: FastAPI) -> None:
     assert "SECRET" not in response.text
     [error] = response.json()["errors"]
     assert error == {"field": "path.item_id", "code": "uuid_parsing", "message": "Invalid value."}
+
+
+def test_unreachable_database_during_a_request_is_a_503(app: FastAPI) -> None:
+    async def query(session: DbSession) -> dict[str, int]:
+        return {"value": (await session.execute(text("SELECT 1"))).scalar_one()}
+
+    app.add_api_route("/api/v1/_test/query", query, methods=["GET"])
+    with TestClient(app, raise_server_exceptions=False) as test_client:
+        response = test_client.get("/api/v1/_test/query")
+
+    assert response.status_code == 503
+    assert response.headers["content-type"] == PROBLEM_JSON
+    assert response.headers["retry-after"] == "5"
+    _assert_problem(503, response.json(), "SERVICE_UNAVAILABLE")
+    assert "127.0.0.1" not in response.text

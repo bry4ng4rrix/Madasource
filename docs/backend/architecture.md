@@ -154,12 +154,12 @@ Aucun fichier vide n'est créé pour un module futur (RJ section 2).
 ### 7.3 Identifiants
 
 - Clés techniques UUID, jamais d'entier séquentiel exposé (RJ section 1).
-- D-15, Proposé au Jour 4 (voir le paragraphe « Jour 4 » ci-dessous) : **UUIDv7**, ordonné dans le temps et plus favorable aux index. Deux options :
+- D-15, **Retenu au Jour 6** : **UUIDv7**, ordonné dans le temps et plus favorable aux index. Deux options :
   - généré par l'application, avec `uuid.uuid7()`, natif à partir de Python 3.14 (vérifié le 2026-10-12 : présent en 3.14.8, absent en 3.12.14) ;
   - généré par PostgreSQL 18 (`uuidv7()`).
   Choix au Jour 4 avec D-27 et la version de PostgreSQL. Sinon, UUIDv4.
 
-  **Jour 4 (2026-10-13)** : Python 3.14 et PostgreSQL 18 retenus par l'utilisateur. Proposition : identifiants générés par l'application (`uuid.uuid7()`), pour que la valeur soit connue avant l'insertion. Mise en œuvre au Jour 6.
+  **Jour 4 (2026-10-13)** : Python 3.14 et PostgreSQL 18 retenus par l'utilisateur. **Jour 6 (2026-10-14)** : identifiants générés par l'application (`uuid.uuid7()`), retenus par l'utilisateur ; la valeur est connue avant l'insertion. Mise en œuvre : `app/db/base.py` (`new_id`, `UUIDPrimaryKeyMixin`).
 - Un UUIDv7 révèle l'instant de création. Sa partie variable fait 74 bits ; dans CPython 3.14, elle se compose d'un compteur de 42 bits et d'environ 32 bits aléatoires (C30). La protection réelle reste le contrôle d'accès ([security-design.md](security-design.md)).
 - Identifiants lisibles : D-16.
 
@@ -250,7 +250,7 @@ Classée V1 (A), mais prévue par aucun jour de la roadmap backend (SRC-18). Pla
 | D-12 | Journaux JSON nettoyés, distincts de l'audit | Proposé | RJ 5, RJ 12 |
 | D-13 | UTC partout, ISO 8601, horloge injectable | Retenu / Proposé | RJ section 1 |
 | D-14 | Decimal et NUMERIC avec devise ; chaînes seulement en entrée ; sortie par modèles Pydantic | Retenu / Proposé | RJ section 1, C29 |
-| D-15 | UUIDv7, généré par l'application (`uuid.uuid7()` de Python 3.14) | Proposé (découle de D-27, Jour 4) ; mise en œuvre au Jour 6 | C30 |
+| D-15 | UUIDv7, généré par l'application (`uuid.uuid7()` de Python 3.14 ; `app/db/base.py`, `new_id`) | Retenu (choix de l'utilisateur, Jour 6, 2026-10-14) | C30 |
 | D-16 | Table technique de compteurs par préfixe et par année | Proposé ; remplacement PROPOSED au Jour 3 (suffixe aléatoire) | Q-37 |
 | D-17 | Feature flags par configuration ; module non monté ; catégorie masquée et refusée | Proposé | Q-75, Q-78 |
 | D-18 | DEMO : déploiement distinct, simulations par les cas d'usage normaux, marquage visible | Proposé | Q-67, C32 |

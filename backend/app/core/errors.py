@@ -25,7 +25,7 @@ from starlette.datastructures import MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import Settings
-from app.core.exceptions import AppError
+from app.core.exceptions import DEFAULT_RETRY_AFTER_SECONDS, AppError
 from app.core.logging import summarize_exception
 from app.core.middleware import (
     CORS_EXPOSED_HEADERS,
@@ -42,7 +42,9 @@ PROBLEM_TYPE: Final = "about:blank"
 # SQLSTATE réessayables : interblocage, conflit de sérialisation, attente de verrou expirée.
 RETRYABLE_SQLSTATES: Final = frozenset({"40P01", "40001", "55P03"})
 STATEMENT_TIMEOUT_SQLSTATE: Final = "57014"
-CONNECTION_SQLSTATE_CLASS: Final = "08"
+# Base indisponible ou inaccessible : connexion (08), authentification (28), base absente
+# (3D), ressources épuisées, comme trop de connexions (53), arrêt du serveur (57P).
+UNAVAILABLE_SQLSTATE_PREFIXES: Final = ("08", "28", "3D", "53", "57P")
 
 # Erreurs HTTP levées par Starlette ou FastAPI (route inconnue, méthode non permise…).
 _HTTP_STATUS_CODES: Final[Mapping[int, str]] = {
@@ -277,9 +279,9 @@ def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
         elif (
             sqlstate == STATEMENT_TIMEOUT_SQLSTATE
             or database_error.connection_invalidated
-            or (sqlstate or "").startswith(CONNECTION_SQLSTATE_CLASS)
+            or (sqlstate or "").startswith(UNAVAILABLE_SQLSTATE_PREFIXES)
         ):
-            # Requête annulée par statement_timeout, ou connexion perdue.
+            # Requête annulée par statement_timeout, connexion perdue ou refusée.
             status, code = 503, "SERVICE_UNAVAILABLE"
         else:
             # Contrainte non associée à un code connu, ou erreur imprévue : 500 sans détail.
@@ -297,7 +299,8 @@ def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
                 "request_id": _request_id(request),
             },
         )
-        return problem_response(request, status=status, code=code)
+        headers = {"Retry-After": str(DEFAULT_RETRY_AFTER_SECONDS)} if status == 503 else None
+        return problem_response(request, status=status, code=code, headers=headers)
 
     async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
         """Erreur 500. Appelée par le middleware d'erreur serveur de Starlette, situé à

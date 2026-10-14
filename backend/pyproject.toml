@@ -63,7 +63,7 @@ known-third-party = ["alembic"]
 python_version = "3.14"
 strict = true
 plugins = ["pydantic.mypy"]
-files = ["app", "tests", "alembic/env.py"]
+files = ["app", "tests", "alembic/env.py", "alembic/versions"]
 # Modules nommés depuis backend/ (tests.support, et non support), sans __init__.py.
 mypy_path = "."
 explicit_package_bases = true

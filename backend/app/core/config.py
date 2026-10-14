@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     database_max_overflow: int = Field(default=5, ge=0, le=50)
     database_connect_timeout_seconds: float = Field(default=5.0, gt=0, le=60)
     database_statement_timeout_ms: int = Field(default=30_000, ge=100, le=600_000)
+    # Valeurs proposées au Jour 6, à valider (Q-103).
+    database_lock_timeout_ms: int = Field(default=5_000, ge=100, le=600_000)
+    database_idle_in_transaction_timeout_ms: int = Field(default=60_000, ge=1_000, le=3_600_000)
     readiness_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
     cors_allowed_origins: Annotated[tuple[str, ...], NoDecode] = ()
     log_level: LogLevel = "INFO"

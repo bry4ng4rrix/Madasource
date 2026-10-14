@@ -260,7 +260,7 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 
 | Règle | Statut |
 |---|---|
-| Deux rôles PostgreSQL : migrations (DDL) et application (DML sans DDL). | Proposé (Jours 4, 6) |
+| Deux rôles PostgreSQL : propriétaire du schéma pour les migrations (DDL) et `madasource_app` pour l'application (DML sans DDL, droits accordés table par table). | **Retenu et implémenté au Jour 6** ([indexes-and-constraints.md](indexes-and-constraints.md) §6.1) |
 | Base jamais exposée publiquement ; connexion chiffrée en production ; sauvegardes chiffrées et restauration testée (Audit D). | Proposé |
 | Aucun outil ni agent connecté à une base de production. | Retenu |
 

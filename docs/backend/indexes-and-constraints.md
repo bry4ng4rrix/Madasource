@@ -6,7 +6,7 @@ Ce document fixe les règles d'intégrité appliquées **par la base**. Les règ
 
 ## 1. Nommage
 
-Convention passée à `MetaData(naming_convention=...)` de SQLAlchemy (Jour 6), pour que les migrations Alembic produisent des noms stables :
+Convention passée à `MetaData(naming_convention=...)` de SQLAlchemy (`app/db/base.py`, Jour 6, testée dans `tests/unit/db/test_base.py`), pour que les migrations Alembic produisent des noms stables :
 
 | Objet | Modèle | Exemple |
 |---|---|---|
@@ -226,10 +226,10 @@ Pas d'index sur `quotation_versions.expires_at` : il couvrirait toutes les versi
 
 | Rôle | Droits | Usage |
 |---|---|---|
-| `madasource_migrator` | Propriétaire du schéma, DDL | Alembic seulement |
-| `madasource_app` | DML sur les tables, sans DDL, sans droit de propriétaire | Application (API, tâches) |
+| Propriétaire du schéma | Propriétaire du schéma, DDL | Alembic seulement (`MIGRATION_DATABASE_URL`). En local : `POSTGRES_USER` de Compose ; en production : un rôle propriétaire non superutilisateur, à créer par l'exploitation (proposition de nom : `madasource_migrator`, Audit D) |
+| `madasource_app` | DML sur les tables accordées, sans DDL, sans droit de propriétaire | Application (API, tâches) (`DATABASE_URL`) |
 
-Les noms de rôles sont des propositions ; ils seront fixés au Jour 6 (reporté depuis le Jour 4). Aucun rôle superutilisateur n'est utilisé par l'application.
+**Retenu au Jour 6 (2026-10-14)**, choix de l'utilisateur. Le rôle applicatif est créé hors des migrations, car il porte un mot de passe (`infrastructure/postgres/10-create-app-role.sh` en local). La première migration (`schema privileges baseline`) retire au rôle `PUBLIC` l'usage du schéma `public` et l'accorde au seul `madasource_app`. Chaque migration qui crée une table accorde ensuite explicitement ses droits (§6.2) : aucun droit par défaut. Aucun rôle superutilisateur n'est utilisé par l'application. Vérifié par `tests/integration/test_privileges.py`.
 
 ### 6.2 Droits de `madasource_app`
 

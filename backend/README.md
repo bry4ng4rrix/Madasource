@@ -1,6 +1,6 @@
 # Backend MadaSource
 
-API REST FastAPI de MadaSource (monolithe modulaire). État au Jour 5 : fondation de l'application (configuration validée, fabrique d'application, routeur `/api/v1`, sondes de santé, erreurs au format Problem Details, journaux JSON, CORS, session de base de données), sans logique métier.
+API REST FastAPI de MadaSource (monolithe modulaire). État au Jour 6 : fondation de l'application (configuration validée, fabrique d'application, routeur `/api/v1`, sondes de santé, erreurs au format Problem Details, journaux JSON, CORS), base déclarative SQLAlchemy, migrations Alembic, deux rôles PostgreSQL et base de test isolée ; aucune table métier.
 
 Ce fichier est la **source de vérité des commandes** du backend. Les autres documents, y compris les skills de Claude Code, renvoient ici.
 
@@ -40,15 +40,43 @@ Depuis `backend/` :
 | Tests : suite complète | `uv run --env-file ../.env pytest` |
 | Tests sans base | `uv run pytest -m "not integration"` (sélection, pas la suite complète) |
 | Serveur local | `uv run --env-file ../.env uvicorn --factory app.main:create_app --reload --port 8002 --no-access-log --no-server-header` |
-| Migrations : têtes | `uv run alembic heads` |
-| Migrations : SQL hors ligne | `uv run --env-file ../.env alembic upgrade head --sql` |
-| Migrations : application | `uv run --env-file ../.env alembic upgrade head` (base démarrée) |
+| Migrations | voir la section « Migrations » ci-dessous |
 
 Points de fonctionnement :
-- **tests** : marqueurs `unit` (sans base ni HTTP), `api` (client HTTP en mémoire, sans base), `integration` (base de test). Tout avertissement est traité comme une erreur (`filterwarnings = error`). Sans `TEST_DATABASE_URL`, les tests d'intégration **échouent** avec la marche à suivre : ils ne sont jamais ignorés ;
-- **base de test** : service `db-test` (profil `test`), données en mémoire (`tmpfs`), vides à chaque démarrage, port hôte 5434. La configuration de test refuse toute base dont le nom ne se termine pas par `_test`. Jamais la base de développement ;
+- **tests** : marqueurs `unit` (sans base ni HTTP), `api` (client HTTP en mémoire, sans base), `integration` (base de test). Tout avertissement est traité comme une erreur (`filterwarnings = error`). Sans `TEST_DATABASE_URL` et `TEST_MIGRATION_DATABASE_URL`, les tests d'intégration **échouent** avec la marche à suivre : ils ne sont jamais ignorés ;
+- **base de test** : service `db-test` (profil `test`), données en mémoire (`tmpfs`), vides à chaque démarrage, port hôte 5434. Le schéma y est créé une fois par session de tests par `alembic upgrade head` (propriétaire du schéma) ; l'application s'y connecte avec le rôle applicatif ; chaque test d'intégration travaille dans une transaction annulée à la fin, la session de requête la rejoignant par points de sauvegarde. La configuration de test refuse toute base dont le nom ne se termine pas par `_test`. Jamais la base de développement ;
 - **serveur** : `--factory` appelle `create_app()`, qui lit et valide la configuration ; `--no-access-log` laisse un seul journal d'accès, celui de l'application (D-12) ; `--no-server-header` retire la bannière `server: uvicorn` ;
-- **migrations** : Alembic lit `DATABASE_URL` dans l'environnement, jamais dans `alembic.ini`. Chaque révision générée est corrigée puis formatée par Ruff (hooks d'`alembic.ini`). Aucune migration avant le Jour 6. Règles : skill `database-migrations` ; jamais de `downgrade base` ni de réinitialisation d'une base.
+- **base de données** : deux rôles. L'application utilise `madasource_app` (`DATABASE_URL`) : lecture et écriture des données, aucun droit sur le schéma. Alembic utilise le propriétaire du schéma (`MIGRATION_DATABASE_URL`). Une connexion refusée, un délai dépassé ou une authentification refusée donnent 503 `SERVICE_UNAVAILABLE`, jamais 500.
+
+## Migrations
+
+Depuis `backend/`, avec `MIGRATION_DATABASE_URL` (propriétaire du schéma) ; règles : skill `database-migrations`.
+
+| Action | Commande |
+|---|---|
+| État de la base | `uv run --env-file ../.env alembic current` |
+| Têtes et historique (sans base) | `uv run alembic heads` ; `uv run alembic history --verbose` |
+| Appliquer jusqu'à la tête | `uv run --env-file ../.env alembic upgrade head` |
+| Relire le SQL sans l'appliquer | `uv run --env-file ../.env alembic upgrade head --sql` |
+| Écart entre modèles et base | `uv run --env-file ../.env alembic check` (« No new upgrade operations detected. ») |
+| Nouvelle révision à partir des modèles | `uv run --env-file ../.env alembic revision --autogenerate -m "<message en anglais>"`, puis **relecture ligne à ligne** |
+| Nouvelle révision écrite à la main | `uv run alembic revision -m "<message en anglais>"` (droits, contraintes `CHECK`, données de référence) |
+
+Règles :
+- une migration par changement cohérent, relue avant application ; une révision appliquée ou partagée n'est jamais modifiée : on en crée une nouvelle ;
+- chaque révision générée est corrigée puis formatée par Ruff (hooks d'`alembic.ini`) ; les fichiers sont nommés `AAAAMMJJ_HHMM_<révision>_<message>.py` (UTC) ;
+- l'autogénération ne voit pas les contraintes `CHECK` ni les droits : ils s'écrivent à la main (`indexes-and-constraints.md` §3.5) ;
+- **chaque migration qui crée une table accorde explicitement ses droits** au rôle `madasource_app` (`GRANT`, par table et par colonne, `indexes-and-constraints.md` §6.2) : sans cela, l'application ne peut pas l'utiliser ;
+- **retour arrière prudent** : `uv run --env-file ../.env alembic downgrade -1`, une révision à la fois, seulement sur une base de développement ou de test, après relecture du `downgrade` et sauvegarde si des données existent. Jamais `downgrade base`, jamais de réinitialisation de base ni de suppression de volume pour « réparer » ; jamais sur une base de production ;
+- les migrations ne s'exécutent pas au démarrage de l'application (D-26).
+
+Rôle applicatif : il est créé par `infrastructure/postgres/10-create-app-role.sh` à l'initialisation d'une base vide. Pour une base déjà initialisée (volume existant), relancer le script, idempotent :
+
+```bash
+docker compose exec db sh /docker-entrypoint-initdb.d/10-create-app-role.sh
+```
+
+La première migration (`schema privileges baseline`) refuse de s'appliquer si ce rôle n'existe pas.
 
 ## Docker Compose
 
@@ -88,18 +116,20 @@ Toutes sont documentées dans `.env.example` (racine), avec des valeurs factices
 | Variable | Usage |
 |---|---|
 | `APP_ENV` | **Obligatoire** : `local`, `test`, `staging`, `production`, `demo` (D-11) |
-| `DATABASE_URL` | URL `postgresql+asyncpg://…` (obligatoire) |
+| `DATABASE_URL` | URL `postgresql+asyncpg://…` du rôle applicatif `madasource_app` (obligatoire) |
+| `MIGRATION_DATABASE_URL` | URL du propriétaire du schéma, pour Alembic seulement |
 | `LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `CORS_ALLOWED_ORIGINS` | Origines autorisées, séparées par des virgules |
 | `DEMO_MODE` | `true` seulement avec `APP_ENV=demo` (D-18) |
 | `DATABASE_POOL_SIZE`, `DATABASE_MAX_OVERFLOW`, `DATABASE_CONNECT_TIMEOUT_SECONDS`, `DATABASE_STATEMENT_TIMEOUT_MS`, `READINESS_TIMEOUT_SECONDS` | Réglages facultatifs de la base |
-| `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Base de développement créée par Compose |
-| `POSTGRES_TEST_PASSWORD`, `TEST_DATABASE_URL` | Base de test éphémère |
+| `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Base de développement créée par Compose ; `POSTGRES_USER` en est le propriétaire du schéma |
+| `POSTGRES_APP_PASSWORD` | Mot de passe du rôle applicatif sur la base de développement |
+| `POSTGRES_TEST_PASSWORD`, `POSTGRES_TEST_APP_PASSWORD`, `TEST_DATABASE_URL`, `TEST_MIGRATION_DATABASE_URL` | Base de test éphémère (propriétaire et rôle applicatif) |
 | `MADASOURCE_DB_HOST_PORT`, `MADASOURCE_API_HOST_PORT`, `MADASOURCE_TEST_DB_HOST_PORT` | Ports de l'hôte |
 
 Garde-fous au démarrage : en `staging`, `production` et `demo`, refus d'une origine CORS `*`, du mot de passe d'exemple de `.env.example` et d'un mot de passe de base de moins de 12 caractères (extension à `staging` et `demo` à valider, Q-102) ; en `production`, refus en plus des origines non HTTPS et de `LOG_LEVEL=DEBUG`. La documentation interactive est désactivée en `production` et en `demo`.
 
-Depuis le Jour 5, `.env` doit aussi définir `POSTGRES_TEST_PASSWORD` (et `TEST_DATABASE_URL`) : Compose exige cette variable pour toute commande, même sans le profil `test`. Un `.env` copié avant le Jour 5 est à compléter à partir de `.env.example`.
+Compose exige ses variables pour toute commande, même sans le profil `test`. Un `.env` copié avant le Jour 6 est à compléter à partir de `.env.example` : `POSTGRES_APP_PASSWORD`, `MIGRATION_DATABASE_URL`, `POSTGRES_TEST_APP_PASSWORD`, `TEST_MIGRATION_DATABASE_URL`, et `DATABASE_URL` et `TEST_DATABASE_URL` qui passent au rôle `madasource_app`.
 
 ## Dépendances
 
@@ -128,12 +158,13 @@ backend/
 │   ├── api/v1/router.py        routeur /api/v1
 │   ├── api/v1/endpoints/       health.py (sondes)
 │   ├── core/                   config.py, exceptions.py, errors.py (Problem Details), logging.py, middleware.py
-│   └── db/session.py           moteur asyncpg, session par requête (DbSession)
-├── alembic/                    env.py asynchrone, gabarit conforme à Ruff ; versions/ vide (Jour 6)
+│   └── db/                     base.py (base déclarative, nommage, UUIDv7), registry.py (découverte des
+│                               modèles), roles.py (rôle applicatif), session.py (moteur, DbSession)
+├── alembic/                    env.py asynchrone ; versions/ : socle des droits sur le schéma (Jour 6)
 ├── tests/
-│   ├── unit/                   configuration, journaux, exceptions
-│   ├── api/                    sondes, erreurs, middlewares, OpenAPI (sans base)
-│   ├── integration/            base de test : sonde ready, session par requête
+│   ├── unit/                   configuration, journaux, exceptions, base déclarative
+│   ├── api/                    sondes, erreurs, middlewares, OpenAPI, journaux (sans base)
+│   ├── integration/            base de test : migrations, droits du rôle applicatif, sessions, sondes
 │   ├── conftest.py, support.py fixtures et configuration de test explicite
 ├── alembic.ini
 ├── Dockerfile                  multi-étapes, UID 10001 non root, uv sync --locked --no-dev, uvicorn --factory

@@ -8,7 +8,7 @@ argument-hint: "<message de migration>"
 
 Migration demandée : $ARGUMENTS
 
-Les commandes s'exécutent depuis `backend/`, avec le préfixe défini dans `backend/README.md` (proposé : `uv run alembic …`, à confirmer au Jour 4).
+Les commandes s'exécutent depuis `backend/`, avec le préfixe défini dans `backend/README.md`, section « Migrations » : `uv run --env-file ../.env alembic …`. Alembic utilise `MIGRATION_DATABASE_URL` (propriétaire du schéma) ; chaque table créée accorde explicitement ses droits au rôle `madasource_app`.
 
 ## Quand l'utiliser
 

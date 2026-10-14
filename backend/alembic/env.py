@@ -1,9 +1,16 @@
-"""Environnement Alembic : squelette du Jour 4, finalisé au Jour 6.
+"""Environnement Alembic (Jour 6).
 
-L'URL de connexion vient de la variable d'environnement ``DATABASE_URL``, jamais
-d'``alembic.ini``, pour qu'aucun mot de passe ne soit versionné. Au Jour 6, elle sera
-lue par l'objet de configuration de l'application, et ``target_metadata`` désignera
-la base déclarative.
+- URL : variable d'environnement ``MIGRATION_DATABASE_URL``, celle du **propriétaire du
+  schéma**, jamais ``alembic.ini`` ni le rôle applicatif (``app/db/roles.py``). Un appel
+  depuis le code (tests) la passe par ``config.attributes["migration_database_url"]``.
+  L'URL est vérifiée sans qu'aucun fragment n'apparaisse dans un message d'erreur.
+- Sécurité d'exécution : verrou consultatif (deux migrations simultanées s'attendent),
+  ``lock_timeout`` (une migration qui attend un verrou échoue au lieu de bloquer le trafic).
+- Métadonnées : toutes les tables déclarées dans ``app/modules/*/models.py``
+  (``app.db.registry``), avec la convention de nommage de ``app.db.base``.
+- Autogénération : types et valeurs par défaut serveur comparés. Les contraintes ``CHECK``
+  ne sont **pas** comparées par Alembic : toute modification d'une liste de valeurs fait
+  l'objet d'une migration écrite à la main (indexes-and-constraints.md §3.5).
 """
 
 import asyncio
@@ -11,31 +18,40 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from sqlalchemy import pool
+from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import parse_database_url
+from app.db.registry import load_metadata
+
+MIGRATION_URL_VARIABLE = "MIGRATION_DATABASE_URL"
+# Clé du verrou consultatif des migrations (pg_advisory_xact_lock), constante du projet.
+MIGRATION_LOCK_KEY = 7_302_418_559_001
+# Une migration qui attend un verrou plus longtemps échoue (SQLSTATE 55P03) : proposé, Q-103.
+MIGRATION_LOCK_TIMEOUT = "10s"
 
 config = context.config
 
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+# Lancé depuis le code (tests), Alembic ne reconfigure pas la journalisation : la
+# configuration de l'application est conservée et son nettoyage s'applique.
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
+    # disable_existing_loggers=False : les journaux de l'application restent actifs.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
-# Aucune table au Jour 4 : la base déclarative est créée au Jour 6.
-target_metadata = None
+target_metadata = load_metadata()
 
 
 def get_database_url() -> str:
-    """Renvoie l'URL de la base, ou échoue clairement sans jamais en citer une partie."""
-    url = os.environ.get("DATABASE_URL")
+    """Renvoie l'URL des migrations, ou échoue clairement sans jamais en citer une partie."""
+    url = config.attributes.get("migration_database_url") or os.environ.get(MIGRATION_URL_VARIABLE)
     if not url:
-        raise RuntimeError("DATABASE_URL n'est pas définie : voir .env.example.")
+        raise RuntimeError(f"{MIGRATION_URL_VARIABLE} n'est pas définie : voir .env.example.")
     try:
         parse_database_url(url)
     except ValueError as exc:
         # Message fixe : jamais un fragment de l'URL, qui contient le mot de passe.
-        raise RuntimeError(str(exc)) from None
+        raise RuntimeError(str(exc).replace("DATABASE_URL", MIGRATION_URL_VARIABLE)) from None
     return url
 
 
@@ -43,9 +59,11 @@ def run_migrations_offline() -> None:
     """Génère le SQL des migrations sans connexion à la base."""
     context.configure(
         url=get_database_url(),
-        target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        target_metadata=target_metadata,
+        compare_type=True,
+        compare_server_default=True,
     )
 
     with context.begin_transaction():
@@ -53,15 +71,26 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        compare_type=True,
+        compare_server_default=True,
+    )
 
     with context.begin_transaction():
+        # Un seul processus migre à la fois ; le verrou est libéré avec la transaction.
+        connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": MIGRATION_LOCK_KEY})
         context.run_migrations()
 
 
 async def run_async_migrations() -> None:
     """Applique les migrations avec un moteur asynchrone, sans pool de connexions."""
-    connectable = create_async_engine(get_database_url(), poolclass=pool.NullPool)
+    connectable = create_async_engine(
+        get_database_url(),
+        poolclass=pool.NullPool,
+        connect_args={"server_settings": {"lock_timeout": MIGRATION_LOCK_TIMEOUT}},
+    )
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
