@@ -181,11 +181,14 @@ Le poste avait aussi perdu uv, Docker et `psql`, ainsi que `/var/lib/docker` (an
 | Rejeu du job `secrets` (étapes extraites du workflow, gitleaks 8.30.1 téléchargé dans le dossier temporaire de session, somme vérifiée) | 5 étapes réussies ; puis, après l'exception `test-secret` : historique (28 commits) et arbre de travail, aucune fuite |
 | Auto-test des hooks de Claude (`.claude/tests/test_hooks.py`) | 0 échec |
 
-Non exécuté : la CI sur GitHub avec ces correctifs (à pousser) ; `actionlint`, `zizmor` (Q-104 g).
+CI sur GitHub avec ces correctifs : run `38860611486` (commit `5b6411c`, poussé par toi), **4 jobs réussis**. Non exécuté : `actionlint`, `zizmor` (Q-104 g).
 
 ### Décisions À VALIDER ajoutées
 
-- **Q-105** a à e : liste blanche des paramètres de requête, refus du multi-hôte et du socket Unix, hôte et port explicites en test, limite de la règle `_test`, `ssl=disable` en production.
+Q-104 : choix acceptés par toi le 2026-10-16 ; réglages GitHub (f) reportés avant la mise en production.
+
+
+- **Q-105** (laissée ouverte par toi le 2026-10-16) a à e : liste blanche des paramètres de requête, refus du multi-hôte et du socket Unix, hôte et port explicites en test, limite de la règle `_test`, `ssl=disable` en production.
 - Exception gitleaks `test-secret` : valeur factice exacte, sous `backend/tests/` seulement (security-design §17).
 - Suppression de `backend/.venv.broken`, à ta convenance.
 

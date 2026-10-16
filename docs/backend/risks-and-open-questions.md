@@ -231,6 +231,7 @@ Format : question — contexte — jour bloqué ou influencé.
   - (g) nouveaux outils, non installés : hook gitleaks avant commit sur le poste ; actionlint ou zizmor pour le workflow ; audit de vulnérabilités (pip-audit ou osv-scanner) ; option `no-build` d'uv (refus de construire un paquet depuis ses sources) ;
   - (h) sonde de santé du service `backend` de Compose : `/live` (processus) plutôt que `/ready` (base) ; choix non documenté jusqu'ici.
   — testing-strategy §10 ; module-boundaries §4, §9 ; security-design §17 ; `backend/README.md`, « Intégration continue » — J7, J9 ; (f) immédiat, avec Q-71.
+  - **Décision de l'utilisateur (2026-10-16)** : choix acceptés en l'état ; les réglages restants (dont f) seront faits par l'utilisateur avant la mise en production. D'ici là, la CI reste non bloquante.
 - **Q-105** — (J7, addendum du 2026-10-16) URL de base de données, appliqué et `À VALIDER` :
   - (a) **liste blanche** des paramètres de requête (`parse_database_url`) : `ssl` et `prepared_statement_cache_size` seulement, une fois chacun. SQLAlchemy transmet la requête telle quelle à `asyncpg.connect` : `database`, `host`, `port`, `user`, `password`, `dsn`, `service`, `servicefile` ou `passfile` remplaçaient la cible vérifiée sur l'URL et contournaient le garde-fou `_test` (audit sécurité du 2026-10-16). Toute autre clé demande une décision écrite ;
   - (b) conséquence : connexions multi-hôtes et socket Unix, que SQLAlchemy n'accepte avec asyncpg que par la requête (`?host=…`), sont refusés. Aucun usage dans le projet ;
@@ -238,6 +239,7 @@ Format : question — contexte — jour bloqué ou influencé.
   - (d) limite inhérente à la règle de testing-strategy §4 : une base nommée `*_test` sur un serveur partagé ou distant reste acceptée ;
   - (e) hors périmètre, relevé par l'audit : `ssl=disable` est accepté dans tous les environnements, production comprise (politique TLS à fixer avec le déploiement).
   — `app/core/config.py` ; testing-strategy §4 ; security-design §17 — avant le Jour 10.
+  - **Décision de l'utilisateur (2026-10-16)** : laissée ouverte ; le comportement appliqué reste en place en attendant.
 
 ### 4.17 Transverse
 

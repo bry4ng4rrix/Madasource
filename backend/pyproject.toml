@@ -14,6 +14,7 @@ dependencies = [
     "asyncpg==0.32.0",
     "alembic==1.20.0",
     "pydantic-settings==2.15.0",
+    "argon2-cffi==25.1.0",
 ]
 
 [dependency-groups]
@@ -32,6 +33,9 @@ dev = [
 package = false
 # Même version d'uv en local, en CI et dans l'image Docker.
 required-version = "==0.13.0"
+# Dépendances transitives retenues sous leur dernière version, publiée depuis moins de
+# 14 jours (délai de carence, Q-104 b) : pycparser 3.1 et 3.11 (2026-10-08, 2026-10-09).
+constraint-dependencies = ["pycparser==3.0"]
 
 [tool.ruff]
 target-version = "py314"
