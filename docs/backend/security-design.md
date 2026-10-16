@@ -1,6 +1,6 @@
 # Conception de la sécurité — backend MadaSource
 
-Jour 2 · 2026-10-12 · Statut : proposition à valider. Document vivant :
+Jour 2 · 2026-10-12 · Statut : proposition à valider. **Mis à jour au Jour 8** (2026-10-16) : primitives implémentées (§4, §14 à §18). Document vivant :
 - primitives au Jour 8 ;
 - organisations et RBAC au Jour 9 ;
 - authentification au Jour 10 ;
@@ -59,12 +59,12 @@ Décisions de sécurité : identifiants **S-NN** ; statuts Retenu / Proposé / �
 
 | ID | Décision | Statut |
 |---|---|---|
-| S-01 | Mots de passe hachés en **Argon2id** par une bibliothèque maintenue (choix au Jour 8). Paramètres alignés sur les recommandations OWASP en vigueur, vérifiées au Jour 8. Rehachage transparent si les paramètres changent. Aucune cryptographie maison. | Proposé |
-| S-02 | Politique de mot de passe : longueur minimale, refus des mots de passe connus comme compromis. Valeurs : Q-76. | À VALIDER |
+| S-01 | Mots de passe hachés en **Argon2id** par une bibliothèque maintenue : **argon2-cffi** 25.1.0 (choix de l'utilisateur, 2026-10-16). Paramètres : profil OWASP **m = 19 MiB, t = 2, p = 1** (Password Storage Cheat Sheet, consultée le 2026-10-16), sel de 16 octets, empreinte de 32 octets ; réglables (`PASSWORD_HASH_*`), refusés au démarrage sous le plus faible des profils OWASP (mémoire ≥ 7 MiB, mémoire × itérations ≥ 35 MiB). Saisie normalisée en NFKC avant hachage. Rehachage transparent : `verify` signale `needs_rehash` quand les paramètres stockés diffèrent des paramètres courants. Calcul exécuté dans un fil du pool (`asyncio.to_thread`), hors de la boucle d'événements. Aucune cryptographie maison. | **Implémenté au Jour 8** (`app/core/security.py`) ; utilisé à partir du Jour 10 |
+| S-02 | Politique de mot de passe : longueur minimale, refus des mots de passe connus comme compromis. Valeurs : Q-76. | **Longueurs implémentées au Jour 8** (`check_password_policy`, en caractères après NFKC, sans règle de composition) : proposition 12 à 128 caractères, `PASSWORD_MIN_LENGTH` et `PASSWORD_MAX_LENGTH`, À VALIDER (Q-76). Le NIST SP 800-63B-4 demande 15 caractères au moins sans second facteur. Refus des mots de passe compromis : non implémenté (liste locale ou service externe), À VALIDER (Q-76) |
 | S-03 | **Jeton d'accès** : JWT signé, durée courte (proposition : 15 minutes, Q-76), algorithme fixé côté serveur. Vérification de `iss`, `aud`, `exp`, `iat`, `sub` (utilisateur), `sid` (session) et `jti`. Le jeton ne transporte **ni rôle ni permission** : ils sont relus à chaque requête, pour qu'un retrait ou une suspension prenne effet immédiatement. | Proposé |
 | S-04 | **Jeton de rafraîchissement** : valeur aléatoire opaque d'au moins 256 bits, stockée **hachée**, rattachée à une session. Rotation à chaque usage. Un jeton déjà consommé qui est réutilisé révoque toute la session (détection de vol). Durée : Q-76. | Proposé |
 | S-05 | **Révocation immédiate** à la déconnexion, au changement ou à la réinitialisation du mot de passe, à la suspension du compte et au retrait d'adhésion. La session (`sid`) est vérifiée à chaque requête. | Proposé |
-| S-06 | **Connexion** : réponse unique (BR-ACC-05), durée comparable (hachage effectué même pour un compte inexistant), limites par IP et par compte, ralentissement progressif plutôt que blocage définitif. | Proposé |
+| S-06 | **Connexion** : réponse unique (BR-ACC-05), durée comparable (hachage effectué même pour un compte inexistant), limites par IP et par compte, ralentissement progressif plutôt que blocage définitif. | Proposé ; primitives au Jour 8 : `PasswordHasher.verify(None, …)` effectue une vérification Argon2id complète sur une empreinte factice, et le limiteur (§15) ; connexion : Jour 10 |
 | S-07 | **Vérification d'email et réinitialisation** : jetons à usage unique, stockés hachés, de courte durée. Réinitialisation suivie d'une révocation des sessions (RJ 10, RJ 11). | Proposé |
 | S-08 | **Premier administrateur** : jamais par une route publique (RJ 10 : « processus sûr », « pas de route publique de bootstrap »). Proposition : une commande en ligne exécutée sur le serveur. Les administrateurs suivants sont créés ou promus par une intervention orchestrée par `admin`, avec audit et notification aux autres admins. | Retenu (pas de route publique) / Proposé (commande en ligne, Q-14) |
 | S-09 | **Second facteur obligatoire pour les administrateurs**, qui accèdent aux marges, aux données bancaires et aux confirmations de paiement. Mise en œuvre proposée :<br>- la session (`auth`) porte un indicateur « second facteur vérifié » ;<br>- à la construction de l'acteur, `access_control` n'accorde les permissions admin qu'à une session qui le porte.<br><br>Ainsi, `auth` n'a pas besoin de savoir qui est admin. Second facteur facultatif ou obligatoire pour les organisations clientes : à décider. | À VALIDER (Q-80) |
@@ -222,17 +222,17 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 | ID | Décision | Statut |
 |---|---|---|
 | — | Limites de débit sur : connexion, rafraîchissement, inscription, réinitialisation, renvoi de vérification, création de RFQ, propositions de négociation, messages, dépôts, recherche publique (CdC §60). Clés : IP et compte pour la connexion ; utilisateur ailleurs. | Proposé |
-| — | Emplacement : reverse proxy (limites grossières) et application (limites fines). Avec plusieurs instances, un stockage partagé (Redis) est nécessaire et doit être justifié au Jour 8. | À VALIDER (Jour 8) |
+| — | Emplacement : reverse proxy (limites grossières) et application (limites fines). **Stratégie retenue avec l'utilisateur le 2026-10-16** : limiteur applicatif **en mémoire**, derrière une interface (`RateLimiter`) ; fenêtre glissante exacte par règle et par clé ; nombre de clés suivies borné (100 000, les plus anciennes oubliées) ; dépassement : 429 `RATE_LIMITED` avec `Retry-After` ; dépendance FastAPI `rate_limit(règle, clé)`, clé par défaut : adresse du client. Valable pour **un seul processus** : avec plusieurs workers ou instances, chaque processus compte de son côté ; un stockage partagé (Redis) remplacera l'implémentation derrière la même interface quand le déploiement le demandera (D-20). Derrière un reverse proxy, uvicorn doit être lancé avec `--proxy-headers` et `--forwarded-allow-ips` limité au proxy. Règles et seuils par endpoint : avec ces endpoints, à partir du Jour 10 (Q-76). | **Implémenté au Jour 8** (`app/core/rate_limit.py`) ; seuils À VALIDER |
 | S-55 | **Quotas métier** par organisation et par statut de compte (Q-11) : nombre de RFQ, plafond de destinataires par RFQ (Q-30). Les RFQ jugées abusives sont exclues des indicateurs de performance des exportateurs (constat M-13). | Proposé ; seuils À VALIDER (Q-30, Q-86) |
-| — | Pagination bornée, taille maximale des requêtes, délai d'exécution maximal des requêtes SQL, 429 avec `Retry-After`. | Proposé |
+| — | Pagination bornée, taille maximale des requêtes, délai d'exécution maximal des requêtes SQL, 429 avec `Retry-After`. | Délai SQL : Jour 6. **Taille des corps : Jour 8**, `BodySizeLimitMiddleware`, 1 MiB par défaut (`MAX_REQUEST_BODY_BYTES`, proposé) : `Content-Length` annoncé trop grand refusé sans lecture, corps par morceaux compté à la lecture, 413 `PAYLOAD_TOO_LARGE` ; `Content-Length` illisible : 400. Limites propres aux dépôts de documents : Jour 29. 429 : Jour 8. Pagination : avec les listes |
 
 ## 16. Transport, en-têtes et configuration
 
 | Règle | Statut |
 |---|---|
-| HTTPS obligatoire en production, HSTS. | Proposé |
+| HTTPS obligatoire en production, HSTS. | HSTS **implémenté au Jour 8** en `staging`, `production` et `demo` : `max-age=31536000; includeSubDomains`, sans `preload` (engagement durable du domaine, décision de son propriétaire). HTTPS : terminaison au reverse proxy (déploiement) |
 | CORS : liste blanche des origines du frontend, jamais `*` en production (D-11). | Proposé |
-| En-têtes `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` sur toute réponse privée ; aucune bannière de version. | Proposé |
+| En-têtes `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` sur toute réponse privée ; aucune bannière de version. | Implémenté au Jour 5 sur toute réponse ; **Jour 8** : `Content-Security-Policy: frame-ancestors 'none'` et `X-Frame-Options: DENY` (aucun affichage dans un cadre) |
 | Documentation interactive et schéma OpenAPI **désactivés en production publique**. Les routes admin n'apparaissent dans aucun schéma public (constat F-6). | Proposé |
 | Démarrage refusé en production en cas de configuration dangereuse (D-11). | Proposé |
 
@@ -241,6 +241,8 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 | Règle | Statut |
 |---|---|
 | Secrets uniquement dans les variables d'environnement ou le gestionnaire de secrets de l'hébergeur (Q-79). Jamais dans Git, une image Docker, un journal ou la configuration CI en clair. | Retenu (RJ section 1) |
+| **Clé de signature des jetons** `AUTH_SIGNING_KEY` (Jour 8, utilisée au Jour 10) : obligatoire, `SecretStr` (absente des représentations et des messages d'erreur), au moins 43 caractères (256 bits en base64 URL) ; valeur d'exemple (`changeme…`) refusée en `staging`, `production` et `demo`. Seule la longueur est vérifiée : l'aléa dépend de la génération (`secrets.token_urlsafe(48)`, indiquée dans `.env.example`). | Implémenté au Jour 8 (choix de l'utilisateur, 2026-10-16) ; rotation : Audit D |
+| **Jetons opaques** (rafraîchissement S-04, vérification et réinitialisation S-07) : `generate_token` (256 bits, `secrets`), stockage de l'empreinte SHA-256 seulement (`hash_token`), comparaison en temps constant (`token_matches`, `hmac.compare_digest`). Un hachage lent est inutile pour 256 bits d'aléa. | Implémenté au Jour 8 ; utilisé à partir du Jour 10 |
 | `.gitignore` : `.env`, `.env.*`, `*.env`, `.envrc` (sauf `.env.example`), environnements virtuels et `.claude/settings.local.json` exclus (Jour 4, motifs `*.env` et `.envrc` au Jour 7 ; R-20 clos). Contrôle CI (job `secrets`) : aucun de ces fichiers dans l'arbre suivi **ni dans l'historique** (ajout puis suppression compris). | Retenu (Jour 4) ; contrôle CI écrit au Jour 7 et rejoué en local ; sa forme étendue (historique, `*.env`, `.envrc`) s'exécutera sur GitHub au prochain push |
 | Le cahier des charges est versionné et poussé sur le dépôt distant. `CLAUDE.md`, `roadmap.md` et `roadmap_backend_fastapi.md` ont été retirés de l'index le 2026-10-12 (commit f598049), mais ils restent dans l'**historique** poussé (commit c6e27d8). **Dépôt constaté public le 2026-10-13** : passage en privé requis, par l'utilisateur (R-26, Q-71). Retirer des fichiers de l'historique serait une opération destructive : seulement avec l'accord explicite de l'utilisateur, et sans effet sur les clones existants. | À VALIDER |
 | Procédure de rotation documentée (Audit D). Une rotation de la clé de signature invalide les jetons en cours ; la rotation de la clé de chiffrement bancaire impose un rechiffrement (Q-81). | Proposé |
@@ -254,7 +256,7 @@ En Modèle A, une transaction implique **trois** acteurs : acheteur, MadaSource,
 
 | Règle | Statut |
 |---|---|
-| Journaux applicatifs nettoyés (D-12) : en plus des secrets, ni prix net, ni marge, ni coût, ni commission. Identifiants plutôt que noms ou emails. | Proposé |
+| Journaux applicatifs nettoyés (D-12) : en plus des secrets, ni prix net, ni marge, ni coût, ni commission. Identifiants plutôt que noms ou emails. | Masquage par nom de clé implémenté au Jour 5 (`app/core/logging.py`) ; **Jour 8** : `signing_key`, `private_key`, `credential`, `pepper`, `otp` ajoutés (les mots de passe, empreintes et jetons étaient déjà couverts) ; montants : nom du type seulement |
 | **Audit métier** (RJ 12, CdC §52) et **événements de sécurité** : échecs de connexion, réinitialisations, refus d'accès inter-organisations (tentatives BOLA), téléchargements sensibles, consultations de données bancaires, lectures admin de conversations, exports, changements de permissions et de feature flags. | Proposé |
 | Les anciennes et nouvelles valeurs sont stockées **selon la classification des champs** ([data-classification.md](data-classification.md) §4) : en clair, masquées (coordonnées bancaires) ou réservées à l'ensemble de permissions « lecture financière » (composantes de prix). La consultation du journal d'audit est elle-même auditée. | Proposé |
 | Ajout seul. Le rôle de base de données de l'application n'a pas les droits `UPDATE` et `DELETE` sur la table d'audit (Jour 12). Garantie d'intégrité supplémentaire (chaînage) : à évaluer. Conservation : Q-69. | Proposé |

@@ -43,6 +43,7 @@ services:
       # Rôle applicatif, sans droit sur le schéma (app/db/roles.py). Le mot de passe doit
       # être compatible avec une URL (voir .env.example). Les migrations ne tournent pas ici.
       DATABASE_URL: postgresql+asyncpg://madasource_app:${POSTGRES_APP_PASSWORD:?}@db:5432/${POSTGRES_DB:?}
+      AUTH_SIGNING_KEY: ${AUTH_SIGNING_KEY:?AUTH_SIGNING_KEY manquant, voir .env.example}
     depends_on:
       db:
         condition: service_healthy

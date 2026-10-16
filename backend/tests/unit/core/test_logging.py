@@ -30,7 +30,23 @@ def test_log_line_is_json_with_required_fields() -> None:
 
 
 @pytest.mark.parametrize(
-    "key", ["password", "new_password", "access_token", "Authorization", "cookie", "iban"]
+    "key",
+    [
+        "password",
+        "new_password",
+        "password_hash",
+        "access_token",
+        "refresh_token",
+        "Authorization",
+        "cookie",
+        "iban",
+        # Jour 8
+        "auth_signing_key",
+        "private_key",
+        "credentials",
+        "pepper",
+        "otp_code",
+    ],
 )
 def test_sensitive_extra_fields_are_redacted(key: str) -> None:
     line = json.loads(JsonFormatter().format(_record(**{key: "s3cr3t-value"})))

@@ -35,6 +35,12 @@ class ValidationAppError(AppError):
     code = "BUSINESS_RULE_VIOLATION"
 
 
+class PasswordPolicyError(ValidationAppError):
+    """Mot de passe hors de la politique (S-02) ; le `detail` ne recopie jamais la saisie."""
+
+    code = "PASSWORD_POLICY_VIOLATION"
+
+
 class BadRequestError(AppError):
     """Requête mal formée hors validation de schéma (en-tête obligatoire absent…)."""
 
@@ -55,6 +61,13 @@ class PermissionDeniedError(AppError):
 
     status_code = HTTPStatus.FORBIDDEN
     code = "PERMISSION_DENIED"
+
+
+class PayloadTooLargeError(AppError):
+    """Corps de requête au-delà de la taille maximale (security-design.md §15)."""
+
+    status_code = HTTPStatus.CONTENT_TOO_LARGE
+    code = "PAYLOAD_TOO_LARGE"
 
 
 class NotFoundError(AppError):

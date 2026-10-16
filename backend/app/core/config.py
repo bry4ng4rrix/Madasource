@@ -26,6 +26,14 @@ PLACEHOLDER_MARKER = "changeme"
 DEPLOYED_ENVIRONMENTS: frozenset[str] = frozenset({"staging", "production", "demo"})
 # Longueur minimale du mot de passe de la base dans un environnement déployé (proposé, Q-102).
 MIN_DEPLOYED_PASSWORD_LENGTH = 12
+# Clé de signature des jetons (Jour 10) : au moins 256 bits, soit 43 caractères en base64 URL
+# (`python -c "import secrets; print(secrets.token_urlsafe(48))"`).
+MIN_SIGNING_KEY_LENGTH = 43
+# Argon2id (S-01) : profils minimaux de l'OWASP (Password Storage Cheat Sheet, consultée le
+# 2026-10-16), tous de même niveau : 46 MiB x 1, 19 MiB x 2, 12 MiB x 3, 9 MiB x 4, 7 MiB x 5.
+# Plancher retenu : mémoire ≥ 7 MiB et mémoire x itérations ≥ 35 MiB (le plus faible d'entre eux).
+MIN_ARGON2_MEMORY_KIB = 7 * 1024
+MIN_ARGON2_MEMORY_TIME_KIB = 7 * 1024 * 5
 # Environnements où la documentation interactive et le schéma OpenAPI sont servis
 # (api-conventions.md §13 ; désactivés en production et en démonstration publique).
 DOCS_ENVIRONMENTS: frozenset[str] = frozenset({"local", "test", "staging"})
@@ -97,6 +105,18 @@ class Settings(BaseSettings):
     cors_allowed_origins: Annotated[tuple[str, ...], NoDecode] = ()
     log_level: LogLevel = "INFO"
     demo_mode: bool = False
+    # Secrets et primitives de sécurité (Jour 8, security-design.md §4, §15, §17).
+    auth_signing_key: SecretStr
+    # Profil OWASP m=19 MiB, t=2, p=1 (choix de l'utilisateur, 2026-10-16).
+    password_hash_memory_kib: int = Field(default=19 * 1024, le=1024 * 1024)
+    password_hash_time_cost: int = Field(default=2, ge=1, le=10)
+    password_hash_parallelism: int = Field(default=1, ge=1, le=8)
+    # Politique de mot de passe proposée, À VALIDER (Q-76). Bornes disjointes (min ≤ 64 ≤ max) :
+    # le minimum ne peut pas dépasser le maximum.
+    password_min_length: int = Field(default=12, ge=8, le=64)
+    password_max_length: int = Field(default=128, ge=64, le=1024)
+    # Taille maximale d'un corps de requête JSON, proposée (security-design.md §15).
+    max_request_body_bytes: int = Field(default=1024 * 1024, ge=1024, le=100 * 1024 * 1024)
 
     @field_validator("database_url")
     @classmethod
@@ -106,6 +126,15 @@ class Settings(BaseSettings):
             raise ValueError(f"DATABASE_URL doit utiliser le pilote {REQUIRED_DRIVER}.")
         if not url.database:
             raise ValueError("DATABASE_URL doit nommer une base de données.")
+        return value
+
+    @field_validator("auth_signing_key")
+    @classmethod
+    def _check_signing_key(cls, value: SecretStr) -> SecretStr:
+        if len(value.get_secret_value()) < MIN_SIGNING_KEY_LENGTH:
+            raise ValueError(
+                f"AUTH_SIGNING_KEY doit compter au moins {MIN_SIGNING_KEY_LENGTH} caractères."
+            )
         return value
 
     @field_validator("cors_allowed_origins", mode="before")
@@ -133,6 +162,14 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _check_environment(self) -> Self:
         problems: list[str] = []
+        if self.password_hash_memory_kib < MIN_ARGON2_MEMORY_KIB or (
+            self.password_hash_memory_kib * self.password_hash_time_cost
+            < MIN_ARGON2_MEMORY_TIME_KIB
+        ):
+            problems.append(
+                "Paramètres Argon2id sous les minimums de l'OWASP (mémoire ≥ 7 MiB, "
+                "mémoire x itérations ≥ 35 MiB)."
+            )
         if self.demo_mode != (self.app_env == "demo"):
             problems.append("DEMO_MODE=true exige APP_ENV=demo, et inversement (D-18).")
         if self.app_env == "test" and not self.database_name.endswith("_test"):
@@ -148,6 +185,10 @@ class Settings(BaseSettings):
             if PLACEHOLDER_MARKER in password.lower():
                 problems.append(
                     f"Le mot de passe d'exemple de .env.example est refusé en {self.app_env}."
+                )
+            if PLACEHOLDER_MARKER in self.auth_signing_key.get_secret_value().lower():
+                problems.append(
+                    f"La clé de signature d'exemple de .env.example est refusée en {self.app_env}."
                 )
             if len(password) < MIN_DEPLOYED_PASSWORD_LENGTH:
                 problems.append(

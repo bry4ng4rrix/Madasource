@@ -159,6 +159,10 @@ Toutes sont documentées dans `.env.example` (racine), avec des valeurs factices
 | `LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `CORS_ALLOWED_ORIGINS` | Origines autorisées, séparées par des virgules |
 | `DEMO_MODE` | `true` seulement avec `APP_ENV=demo` (D-18) |
+| `AUTH_SIGNING_KEY` | **Obligatoire** : clé de signature des jetons (Jour 10), au moins 43 caractères ; la valeur d'exemple (`changeme…`) est refusée en `staging`, `production` et `demo` |
+| `PASSWORD_HASH_MEMORY_KIB`, `PASSWORD_HASH_TIME_COST`, `PASSWORD_HASH_PARALLELISM` | Argon2id (19456, 2, 1 : profil OWASP) ; refusés sous les minimums de l'OWASP |
+| `PASSWORD_MIN_LENGTH`, `PASSWORD_MAX_LENGTH` | Politique de mot de passe (12, 128 : proposition, Q-76) |
+| `MAX_REQUEST_BODY_BYTES` | Taille maximale d'un corps de requête (1 MiB) ; au-delà, 413 `PAYLOAD_TOO_LARGE` |
 | `DATABASE_POOL_SIZE`, `DATABASE_MAX_OVERFLOW`, `DATABASE_CONNECT_TIMEOUT_SECONDS`, `DATABASE_STATEMENT_TIMEOUT_MS`, `DATABASE_LOCK_TIMEOUT_MS`, `DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `READINESS_TIMEOUT_SECONDS` | Réglages facultatifs de la base (délais : Q-103) |
 | `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` | Base de développement créée par Compose ; `POSTGRES_USER` en est le propriétaire du schéma |
 | `POSTGRES_APP_PASSWORD` | Mot de passe du rôle applicatif sur la base de développement |
@@ -182,6 +186,7 @@ Versions épinglées exactement dans `pyproject.toml` ; dépendances transitives
 | `sqlalchemy[asyncio]` | 2.1.4 | ORM asynchrone (stack imposée : SQLAlchemy 2.x async) ; l'extra installe `greenlet` |
 | `asyncpg` | 0.32.0 | Pilote PostgreSQL asynchrone (D-10, choix du 2026-10-13) |
 | `alembic` | 1.20.0 | Migrations (stack imposée) |
+| `argon2-cffi` | 25.1.0 | Hachage des mots de passe en Argon2id (S-01, choix de l'utilisateur au Jour 8) : implémentation de référence, maintenue par Hynek Schlawack, licence MIT, publiée le 2025-06-03. Apporte `argon2-cffi-bindings` 26.1.0 (code C de référence d'Argon2, MIT), `cffi` 2.1.1 (MIT) et `pycparser` (BSD-3-Clause), retenu en 3.0 par `constraint-dependencies` : les versions 3.1 et 3.11 avaient moins de 14 jours (Q-104 b) |
 | `pytest` (dev) | 9.1.1 | Tests (stack imposée) ; tests asynchrones par le plugin d'AnyIO, déjà installé avec Starlette |
 | `httpx2` (dev) | 2.13.1 | Client HTTP du `TestClient` de Starlette. Starlette 1.7 rend obsolète l'usage de `httpx` au profit de `httpx2`, publié par l'auteur de `httpx` (dépôt `pydantic/httpx2`) |
 | `ruff` (dev) | 0.17.0 | Lint et formatage (stack imposée) |
@@ -199,6 +204,8 @@ backend/
 │   ├── api/v1/router.py        routeur /api/v1
 │   ├── api/v1/endpoints/       health.py (sondes)
 │   ├── core/                   config.py, exceptions.py, errors.py (Problem Details), logging.py, middleware.py
+│   │                           (contexte, en-têtes, taille des corps), security.py (Argon2id, jetons opaques),
+│   │                           rate_limit.py (limiteur en mémoire, dépendance 429)
 │   ├── db/                     base.py (base déclarative, nommage, UUIDv7), registry.py (découverte des
 │   │                           modèles), roles.py (rôle applicatif), session.py (moteur, DbSession)
 │   └── modules/                paquet conteneur des modules métier (vide au Jour 7)

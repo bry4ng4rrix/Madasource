@@ -89,6 +89,7 @@ Le catalogue s'enrichit module par module. Un code n'est jamais réutilisé avec
 | `METHOD_NOT_ALLOWED` | 405 | Méthode non permise sur ce chemin | |
 | `CATEGORY_DISABLED` | 422 | Création dans une catégorie dont le flag est désactivé | D-17 |
 | `BUSINESS_RULE_VIOLATION` | 422 | Règle métier générique sur les données saisies | Préférer un code spécifique (par exemple `QUANTITY_BELOW_MOQ`), sans montant ni seuil dans `detail` |
+| `PASSWORD_POLICY_VIOLATION` | 422 | Mot de passe hors de la politique (S-02) : trop court ou trop long | Ajouté au Jour 8 ; `detail` fixe, sans la saisie ni le seuil ; valeurs : Q-76 |
 | `INVALID_STATE_TRANSITION` | 409 | Transition non permise depuis l'état courant, ou à cet acteur dans cet état | BR-RFQ-01, BR-TRD-06 |
 | `QUOTATION_EXPIRED` | 409 | Action sur une quotation ou une proposition expirée | BR-QUO-05 |
 | `OFFER_VERSION_MISMATCH` | 409 | La version de la proposition transmise n'est plus la version courante | S-43 ; le client relit la proposition |
@@ -118,6 +119,8 @@ Implémentée au Jour 5 dans `app/core/exceptions.py` :
 | `ConflictError` | 409 | Conflit générique |
 | `InvalidStateTransitionError` | 409 | Transition refusée par une machine d'état |
 | `ConcurrentModificationError` | 409 | Interblocage, conflit de sérialisation ou attente de verrou expirée (`CONCURRENT_MODIFICATION`) |
+| `PasswordPolicyError` | 422 | Mot de passe hors de la politique (`PASSWORD_POLICY_VIOLATION`, Jour 8) |
+| `PayloadTooLargeError` | 413 | Corps de requête trop volumineux (`PAYLOAD_TOO_LARGE`, Jour 8). Le middleware de taille lève une `HTTPException(413)`, que FastAPI relaie pendant la lecture du corps |
 | `RateLimitedError` | 429 | Limite atteinte |
 | `ServiceUnavailableError` | 503 | Dépendance indisponible |
 

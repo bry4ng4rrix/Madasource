@@ -1,6 +1,6 @@
 # Risques, contradictions et questions ouvertes — MadaSource
 
-Jour 1 · 2026-10-12 · Statut : à revoir avec le client · **Mis à jour au Jour 2** : risques R-26 à R-31, contradictions SRC-16 à SRC-19, questions Q-78 à Q-93 (marquées « (J2) ») · **Mis à jour au Jour 3** (2026-10-13) : réponses PROPOSED annotées, risque R-32, questions Q-94 à Q-101 (marquées « (J3) ») · **Mis à jour au Jour 4** : R-20 clos, R-26 et Q-71 (dépôt public), SRC-13 · **Mis à jour au Jour 5** : Q-102 · **Mis à jour au Jour 6** : Q-103 · **Mis à jour au Jour 7** : Q-104, Q-71 (journaux de CI) ; Q-105 (addendum du 2026-10-16)
+Jour 1 · 2026-10-12 · Statut : à revoir avec le client · **Mis à jour au Jour 2** : risques R-26 à R-31, contradictions SRC-16 à SRC-19, questions Q-78 à Q-93 (marquées « (J2) ») · **Mis à jour au Jour 3** (2026-10-13) : réponses PROPOSED annotées, risque R-32, questions Q-94 à Q-101 (marquées « (J3) ») · **Mis à jour au Jour 4** : R-20 clos, R-26 et Q-71 (dépôt public), SRC-13 · **Mis à jour au Jour 5** : Q-102 · **Mis à jour au Jour 6** : Q-103 · **Mis à jour au Jour 7** : Q-104, Q-71 (journaux de CI) ; Q-105 (addendum du 2026-10-16) · **Mis à jour au Jour 8** : Q-76 (valeurs proposées), Q-106
 
 Ce document est le point d'entrée des décisions `À VALIDER`. Chaque question indique le jour de la roadmap backend qu'elle bloque ou influence. Une question tranchée est déplacée en section 5 avec la décision et sa date, jamais supprimée.
 
@@ -105,6 +105,7 @@ Format : question — contexte — jour bloqué ou influencé.
 - **Q-14** — Procédure de création du premier administrateur et des comptes admin suivants. — RJ 10 — J10.
 - **Q-74** — Un utilisateur peut-il appartenir à plusieurs organisations ? Les administrateurs appartiennent-ils à une organisation interne « MadaSource » ? Proposition : un admin n'est jamais membre d'une organisation cliente (S-33). — CdC §54 — J3, J9. **Réponse reçue le 2026-10-13 : PROPOSED, non approuvée** ([registre des décisions](../decisions/architecture-decisions.md)).
 - **Q-76** — Durée de vie des tokens d'accès et de rafraîchissement, rotation, politique de mot de passe (longueur, complexité), verrouillage après échecs de connexion. — RJ 10 (« selon les règles validées ») — J8, J10.
+  - (J8, 2026-10-16) Primitives posées, valeurs proposées : longueur 12 à 128 caractères après NFKC, sans règle de composition (le NIST SP 800-63B-4 demande 15 au moins sans second facteur) ; refus des mots de passe compromis non implémenté (liste locale à embarquer ou service externe, aucune intégration externe en V1) ; seuils de limitation de débit par endpoint à fixer avec le Jour 10.
 - **Q-80** — (J2) Second facteur d'authentification obligatoire pour les administrateurs ? Proposé, ou obligatoire, pour les utilisateurs des organisations clientes ? — CdC §60 ; S-09 — J10.
 - **Q-98** — (J3) Un utilisateur membre à la fois de l'organisation acheteuse et de l'organisation exportatrice d'un même objet (possible avec Q-74) : interdire cette double adhésion, ou seulement bloquer ses actions (quotation, contre-offre, acceptation, avis) sur ces objets ? En Modèle A, il lirait les deux conventions, donc la marge, en changeant d'organisation active. Proposition : blocage des actions, plus signalement à l'acceptation d'une invitation. — CdC §54, §61 ; S-36 ; data-classification.md §3.9 — J9, J24 à J27.
 - **Q-100** — (J3) Un compte administrateur MadaSource peut-il aussi détenir une adhésion à une organisation cliente ? Q-74 dit « pas membres par défaut ». Proposition : non (S-33, constat de sécurité E-6). — CdC §53 ; Q-74 — J9, J10.
@@ -240,6 +241,13 @@ Format : question — contexte — jour bloqué ou influencé.
   - (e) hors périmètre, relevé par l'audit : `ssl=disable` est accepté dans tous les environnements, production comprise (politique TLS à fixer avec le déploiement).
   — `app/core/config.py` ; testing-strategy §4 ; security-design §17 — avant le Jour 10.
   - **Décision de l'utilisateur (2026-10-16)** : laissée ouverte ; le comportement appliqué reste en place en attendant.
+- **Q-106** — (J8) Primitives de sécurité, proposées et appliquées en attendant :
+  - (a) taille maximale d'un corps de requête : 1 MiB (`MAX_REQUEST_BODY_BYTES`), hors dépôts de documents (Jour 29) ;
+  - (b) HSTS en `staging`, `production` et `demo` : `max-age=31536000; includeSubDomains`, sans `preload` ; suppose que tous les sous-domaines servent du HTTPS ;
+  - (c) limitation de débit par processus : avec plusieurs workers ou instances, une limite de N devient N par processus, jusqu'au passage à un stockage partagé ; le limiteur oublie les clés au-delà de 100 000 ;
+  - (d) clé de signature : longueur minimale seulement (43 caractères), pas de mesure d'entropie ; procédure de rotation à écrire (Audit D) ;
+  - (e) adresse du client derrière un reverse proxy : `--proxy-headers` et `--forwarded-allow-ips` à fixer avec le déploiement (Q-79).
+  — security-design §4, §15, §16, §17 ; `app/core/security.py`, `rate_limit.py`, `middleware.py` — avant le Jour 10 (a, c) ; au déploiement (b, e).
 
 ### 4.17 Transverse
 
@@ -270,7 +278,7 @@ Format : question — contexte — jour bloqué ou influencé.
 | J2-J3 (architecture, données) | Q-09, Q-10, Q-12, Q-25, Q-37, Q-66, Q-67, Q-68, Q-74, Q-82 : **réponses reçues le 2026-10-13, PROPOSED**, à approuver ([registre des décisions](../decisions/architecture-decisions.md)). Reste ouverte : Q-75. |
 | Avant J9 (planification) | Q-93 : réponse PROPOSED reçue ; point non résolu CF-08 / SQ-02, à trancher **avant J14** ([dependency-graph.md](dependency-graph.md)) |
 | J4 (initialisation du dépôt) | Q-79 : sans effet sur le Jour 4 (aucun déploiement), reportée à l'Audit D |
-| J8-J15 (sécurité, accès, comptes, vérification) | Q-11, Q-13, Q-14, Q-15, Q-16, Q-76, Q-80, Q-81, Q-87, Q-89, Q-90, Q-96, Q-97, Q-98, Q-100, Q-101, Q-102, Q-103, Q-104, Q-105 ; approbation de Q-09, Q-10, Q-12, Q-74 ; SQ-01, **SQ-02** |
+| J8-J15 (sécurité, accès, comptes, vérification) | Q-11, Q-13, Q-14, Q-15, Q-16, Q-76, Q-80, Q-81, Q-87, Q-89, Q-90, Q-96, Q-97, Q-98, Q-100, Q-101, Q-102, Q-103, Q-104, Q-105, Q-106 ; approbation de Q-09, Q-10, Q-12, Q-74 ; SQ-01, **SQ-02** |
 | J16-J18 (produits, marketplace) | Q-06, Q-17, Q-18, Q-19, Q-20, Q-21, Q-77, Q-78, Q-86 |
 | J19-J23 (RFQ, matching) | Q-22, Q-23, Q-24, Q-27, Q-30, Q-31, Q-32, Q-84, Q-85, Q-95 ; approbation de Q-25, Q-37 ; **SQ-03** (avant J21), SQ-04 |
 | J24-J27 (quotations, négociation, Trade) | **Q-01**, Q-02, Q-03, Q-04, **Q-05**, Q-26, Q-34, Q-35, Q-38, **Q-82** (approbation), Q-91, Q-94, Q-98, Q-99 ; **SQ-05** (avant J24) |

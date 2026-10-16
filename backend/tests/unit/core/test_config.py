@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.config import Settings
-from tests.support import DEPLOYED_DATABASE_URL, make_settings
+from tests.support import DEPLOYED_DATABASE_URL, TEST_SIGNING_KEY, make_settings
 
 pytestmark = pytest.mark.unit
 
@@ -119,6 +119,7 @@ def test_settings_read_from_environment(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setenv("DATABASE_URL", PRODUCTION_URL)
     monkeypatch.setenv("CORS_ALLOWED_ORIGINS", "https://a.example.com, http://localhost:3000")
     monkeypatch.setenv("LOG_LEVEL", "WARNING")
+    monkeypatch.setenv("AUTH_SIGNING_KEY", TEST_SIGNING_KEY)
 
     settings = Settings()
 
@@ -268,3 +269,73 @@ def test_unencoded_at_sign_in_password_is_refused(url: str) -> None:
     assert "n'est pas une URL" in str(excinfo.value)
     assert "Tail" not in str(excinfo.value)
     assert "word" not in str(excinfo.value)
+
+
+def test_signing_key_is_required(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_ENV", "local")
+    monkeypatch.setenv("DATABASE_URL", PRODUCTION_URL)
+    monkeypatch.delenv("AUTH_SIGNING_KEY", raising=False)
+
+    with pytest.raises(ValidationError, match="auth_signing_key"):
+        Settings()
+
+
+def test_short_signing_key_is_refused_without_echo() -> None:
+    with pytest.raises(ValidationError, match="au moins 43") as excinfo:
+        make_settings(auth_signing_key="test-short-Tail")
+
+    assert "Tail" not in str(excinfo.value)
+
+
+def test_signing_key_is_secret_in_repr() -> None:
+    settings = make_settings()
+
+    assert TEST_SIGNING_KEY not in repr(settings)
+    assert settings.auth_signing_key.get_secret_value() == TEST_SIGNING_KEY
+
+
+@pytest.mark.parametrize("app_env", ["staging", "production", "demo"])
+def test_example_signing_key_is_refused_when_deployed(app_env: str) -> None:
+    with pytest.raises(ValidationError, match="clé de signature d'exemple"):
+        make_settings(
+            app_env=app_env,
+            demo_mode=app_env == "demo",
+            database_url=PRODUCTION_URL,
+            cors_allowed_origins=("https://app.example.com",),
+            auth_signing_key="changeme0signing0key0for0local0development0only",
+        )
+
+
+def test_example_signing_key_is_accepted_locally() -> None:
+    key = "changeme0signing0key0for0local0development0only"
+    assert make_settings(auth_signing_key=key).auth_signing_key.get_secret_value() == key
+
+
+@pytest.mark.parametrize(
+    ("memory_kib", "time_cost"),
+    [(46 * 1024, 1), (19 * 1024, 2), (12 * 1024, 3), (9 * 1024, 4), (7 * 1024, 5)],
+)
+def test_owasp_argon2_profiles_are_accepted(memory_kib: int, time_cost: int) -> None:
+    settings = make_settings(password_hash_memory_kib=memory_kib, password_hash_time_cost=time_cost)
+
+    assert settings.password_hash_memory_kib == memory_kib
+
+
+@pytest.mark.parametrize(
+    ("memory_kib", "time_cost"), [(19 * 1024, 1), (6 * 1024, 10), (12 * 1024, 2), (1024, 1)]
+)
+def test_argon2_below_owasp_minimums_is_refused(memory_kib: int, time_cost: int) -> None:
+    with pytest.raises(ValidationError, match="minimums de l'OWASP"):
+        make_settings(password_hash_memory_kib=memory_kib, password_hash_time_cost=time_cost)
+
+
+def test_security_defaults() -> None:
+    settings = make_settings()
+
+    assert (
+        settings.password_hash_memory_kib,
+        settings.password_hash_time_cost,
+        settings.password_hash_parallelism,
+    ) == (19 * 1024, 2, 1)
+    assert (settings.password_min_length, settings.password_max_length) == (12, 128)
+    assert settings.max_request_body_bytes == 1024 * 1024

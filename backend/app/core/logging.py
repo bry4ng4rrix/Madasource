@@ -33,6 +33,12 @@ SENSITIVE_KEY_PARTS = (
     "account_number",
     "bic",
     "database_url",
+    # Jour 8 : clés et facteurs d'authentification (security-design.md §18).
+    "signing_key",
+    "private_key",
+    "credential",
+    "pepper",
+    "otp",
 )
 # Attributs propres à LogRecord : tout autre attribut vient de `extra=`. `color_message`
 # est ajouté par uvicorn (codes de couleur ANSI), inutile dans un journal JSON.

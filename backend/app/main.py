@@ -12,10 +12,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import API_V1_PREFIX, api_router
-from app.core.config import Settings
+from app.core.config import DEPLOYED_ENVIRONMENTS, Settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
-from app.core.middleware import CORS_EXPOSED_HEADERS, REQUEST_ID_HEADER, RequestContextMiddleware
+from app.core.middleware import (
+    CORS_EXPOSED_HEADERS,
+    REQUEST_ID_HEADER,
+    BodySizeLimitMiddleware,
+    RequestContextMiddleware,
+)
+from app.core.rate_limit import InMemoryRateLimiter
 from app.db.session import create_engine, create_session_factory
 
 API_TITLE = "MadaSource API"
@@ -58,8 +64,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
     )
     app.state.settings = settings
+    # Limiteur propre au processus (app/core/rate_limit.py) : un stockage partagé le
+    # remplacera quand plusieurs instances seront déployées.
+    app.state.rate_limiter = InMemoryRateLimiter()
 
     register_exception_handlers(app, settings)
+    # Le plus interne : la taille du corps est contrôlée au moment où FastAPI le lit.
+    app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_body_bytes)
     # Le dernier middleware ajouté est le plus externe : le contexte de requête englobe
     # CORS, pour que même les réponses de pré-vérification portent X-Request-ID.
     app.add_middleware(
@@ -71,7 +82,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         expose_headers=list(CORS_EXPOSED_HEADERS),
         max_age=600,
     )
-    app.add_middleware(RequestContextMiddleware, demo=settings.app_env == "demo")
+    app.add_middleware(
+        RequestContextMiddleware,
+        demo=settings.app_env == "demo",
+        hsts=settings.app_env in DEPLOYED_ENVIRONMENTS,
+    )
 
     app.include_router(api_router)
     return app

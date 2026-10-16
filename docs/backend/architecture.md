@@ -335,4 +335,4 @@ Le CdC §77 (point 2) demande une recommandation de stack. La roadmap l'impose (
 | gitleaks | Retenu (choix de l'utilisateur, Jour 7) | Recherche de secrets dans tout l'historique Git, en CI ; binaire officiel vérifié par sa somme SHA-256 |
 | Docker Compose | Retenu | Environnement reproductible (backend et PostgreSQL), aligné avec la CI |
 | uv | Retenu (Jour 4, version 0.13.0 imposée par `required-version`) | Verrouillage reproductible des dépendances (`uv.lock`) ; gestion des versions de Python |
-| Redis, Celery | Non retenus au départ (D-20) | À introduire seulement si un besoin est démontré (Jour 31, limites de débit partagées au Jour 8) |
+| Redis, Celery | Non retenus au départ (D-20) | À introduire seulement si un besoin est démontré (Jour 31). Jour 8 : limiteur de débit en mémoire, derrière une interface ; Redis le remplacera quand plusieurs instances seront déployées (choix de l'utilisateur, 2026-10-16) |

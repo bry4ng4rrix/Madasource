@@ -83,7 +83,7 @@ class PasswordHasher:
         )
 
     async def hash_async(self, password: str) -> str:
-        """Comme `hash`, dans un fil du pool : le calcul (mémoire et CPU) ne bloque pas la boucle."""
+        """Comme `hash`, dans un fil du pool : le calcul ne bloque pas la boucle d'événements."""
         return await asyncio.to_thread(self.hash, password)
 
     async def verify_async(self, stored_hash: str | None, password: str) -> PasswordVerification:

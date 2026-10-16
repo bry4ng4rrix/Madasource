@@ -5,7 +5,10 @@ Pour chaque requête HTTP :
   placé dans `scope["state"]` (relu par le gestionnaire des erreurs 500) et dans une
   variable de contexte (relue par les journaux) ; renvoyé dans l'en-tête de réponse ;
 - un seul journal d'accès, sans chaîne de requête (elle peut contenir un jeton) ;
-- en-têtes de sécurité et marquage DEMO sur toute réponse passant par ce middleware.
+- en-têtes de sécurité et marquage DEMO sur toute réponse passant par ce middleware ; HSTS
+  dans les environnements déployés (security-design.md §16).
+
+`BodySizeLimitMiddleware` borne la taille des corps de requête (security-design.md §15).
 
 Middleware ASGI pur, et non `BaseHTTPMiddleware`, pour s'appliquer aussi aux réponses
 d'erreur et ne pas interférer avec la diffusion des réponses.
@@ -17,6 +20,7 @@ import uuid
 from collections.abc import MutableMapping
 from typing import Any
 
+from fastapi import HTTPException
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
@@ -33,7 +37,13 @@ SECURITY_HEADERS: dict[str, str] = {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "no-referrer",
     "Cache-Control": "no-store",
+    # API sans page à encadrer : refus de tout affichage dans un cadre (détournement de clic).
+    "Content-Security-Policy": "frame-ancestors 'none'",
+    "X-Frame-Options": "DENY",
 }
+# Environnements déployés seulement, derrière HTTPS : un an, sous-domaines compris. Sans
+# `preload`, qui engage le domaine durablement (décision du propriétaire du domaine).
+HSTS_HEADER = ("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 
 access_logger = logging.getLogger("app.access")
 
@@ -61,18 +71,23 @@ def request_id_from_scope(scope: MutableMapping[str, Any]) -> str | None:
     return None
 
 
-def apply_response_headers(headers: MutableHeaders, *, request_id: str, demo: bool) -> None:
+def apply_response_headers(
+    headers: MutableHeaders, *, request_id: str, demo: bool, hsts: bool = False
+) -> None:
     headers[REQUEST_ID_HEADER] = request_id
     for name, value in SECURITY_HEADERS.items():
         headers[name] = value
+    if hsts:
+        headers[HSTS_HEADER[0]] = HSTS_HEADER[1]
     if demo:
         headers[DEMO_MODE_HEADER] = "demo"
 
 
 class RequestContextMiddleware:
-    def __init__(self, app: ASGIApp, *, demo: bool = False) -> None:
+    def __init__(self, app: ASGIApp, *, demo: bool = False, hsts: bool = False) -> None:
         self.app = app
         self.demo = demo
+        self.hsts = hsts
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -90,7 +105,10 @@ class RequestContextMiddleware:
             if message["type"] == "http.response.start":
                 status_code = message["status"]
                 apply_response_headers(
-                    MutableHeaders(scope=message), request_id=request_id, demo=self.demo
+                    MutableHeaders(scope=message),
+                    request_id=request_id,
+                    demo=self.demo,
+                    hsts=self.hsts,
                 )
             await send(message)
 
@@ -114,3 +132,42 @@ class RequestContextMiddleware:
                 },
             )
             request_id_var.reset(token)
+
+
+class BodySizeLimitMiddleware:
+    """Refuse en 413 un corps de requête au-delà de `max_bytes`.
+
+    Contrôle à la lecture du corps : un `Content-Length` annoncé trop grand est refusé sans
+    rien lire (illisible : 400) ; un corps transmis par morceaux est compté au fil de la
+    lecture. L'exception `HTTPException` est relayée par FastAPI telle quelle, puis traduite
+    en Problem Details (`PAYLOAD_TOO_LARGE`, `BAD_REQUEST`) par le gestionnaire central. Une
+    route qui ne lit pas son corps n'est pas concernée.
+    """
+
+    def __init__(self, app: ASGIApp, *, max_bytes: int) -> None:
+        self.app = app
+        self.max_bytes = max_bytes
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        declared = Headers(scope=scope).get("content-length")
+        max_bytes = self.max_bytes
+        received = 0
+
+        async def limited_receive() -> Message:
+            nonlocal received
+            if declared is not None and not declared.isdigit():
+                # Longueur illisible (négative, non numérique) : requête mal formée.
+                raise HTTPException(status_code=400)
+            if declared is not None and int(declared) > max_bytes:
+                raise HTTPException(status_code=413)
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > max_bytes:
+                    raise HTTPException(status_code=413)
+            return message
+
+        await self.app(scope, limited_receive, send)

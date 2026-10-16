@@ -16,6 +16,9 @@ UNREACHABLE_DATABASE_URL = "postgresql+asyncpg://unused:unused@127.0.0.1:9/unrea
 ALLOWED_ORIGIN = "http://localhost:3000"
 # URL injoignable au mot de passe assez fort pour un environnement déployé (valeur factice).
 DEPLOYED_DATABASE_URL = "postgresql+asyncpg://madasource:StrongValue42xyz@127.0.0.1:9/madasource"
+# Clé de signature factice des tests : 48 caractères, sans le préfixe refusé en déploiement
+# (changeme) ; volontairement sans aléa, pour ne ressembler à aucun vrai secret.
+TEST_SIGNING_KEY = "test-" + "x" * 43
 
 
 def make_settings(**overrides: Any) -> Settings:
@@ -30,6 +33,7 @@ def make_settings(**overrides: Any) -> Settings:
         "cors_allowed_origins": (ALLOWED_ORIGIN,),
         "log_level": "INFO",
         "demo_mode": False,
+        "auth_signing_key": TEST_SIGNING_KEY,
     }
     values.update(overrides)
     return Settings(**values)
