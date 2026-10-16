@@ -1,6 +1,7 @@
 """Primitives de sécurité : Argon2id, politique de mot de passe, jetons opaques (Jour 8)."""
 
 import asyncio
+import threading
 import unicodedata
 from collections.abc import Callable
 from typing import Any, Literal
@@ -181,7 +182,19 @@ def argon2_calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return calls
 
 
-@pytest.mark.parametrize("stored", ["", "not-a-hash"])
+@pytest.mark.parametrize(
+    "stored",
+    [
+        "",
+        "not-a-hash",
+        "$argon2id$garbage",
+        "$argon2id$v=19$m=19456,t=2,p=1$c2FsdHNhbHRzYWx0c2FsdA$dHJ1bmNhdGVk",
+        # Paramètres au-delà des plafonds : la vérification coûterait des secondes.
+        "$argon2id$v=19$m=4000000,t=2,p=1$c2FsdHNhbHRzYWx0c2FsdA$"
+        "aGFzaGhhc2hoYXNoaGFzaGhhc2hoYXNoaGFzaGhhc2g",
+    ],
+    ids=["vide", "texte", "illisible", "tronquee", "parametres-demesures"],
+)
 def test_unreadable_stored_hash_costs_a_full_verification(
     hasher: PasswordHasher, argon2_calls: list[str], stored: str
 ) -> None:
@@ -272,11 +285,72 @@ async def test_saturated_hashing_returns_service_unavailable() -> None:
     hasher = PasswordHasher.from_settings(
         make_settings(password_hash_max_concurrency=1, password_hash_queue_timeout_seconds=0.05)
     )
-    await hasher._slots.acquire()  # place unique occupée
+    semaphore = hasher._semaphore()
+    await semaphore.acquire()  # place unique occupée
     try:
         with pytest.raises(ServiceUnavailableError) as excinfo:
             await hasher.verify_async(None, SAMPLE)
     finally:
-        hasher._slots.release()
+        semaphore.release()
 
     assert excinfo.value.headers["Retry-After"] == "1"
+
+
+def test_hash_token_accepts_unencodable_input() -> None:
+    stored = hash_token(generate_token())
+
+    assert len(hash_token("\ud800")) == 64
+    assert token_matches("\ud800", stored) is False
+
+
+@pytest.mark.anyio
+async def test_cancelled_call_keeps_its_slot_until_the_thread_ends(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    hasher = PasswordHasher.from_settings(make_settings(password_hash_max_concurrency=1))
+    started, finish = threading.Event(), threading.Event()
+    real_verify = hasher.verify
+
+    def slow_verify(stored: str | None, password: str) -> Any:
+        started.set()
+        finish.wait(timeout=5)
+        return real_verify(stored, password)
+
+    monkeypatch.setattr(hasher, "verify", slow_verify)
+    task = asyncio.create_task(hasher.verify_async(None, SAMPLE))
+    assert await asyncio.to_thread(started.wait, 5)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    # Le fil tourne encore : la place reste prise.
+    assert hasher._semaphore().locked() is True
+    finish.set()
+    for _ in range(500):
+        if not hasher._semaphore().locked():
+            break
+        await asyncio.sleep(0.01)
+    assert hasher._semaphore().locked() is False
+
+
+def test_hasher_works_across_event_loops() -> None:
+    hasher = PasswordHasher.from_settings(make_settings(password_hash_max_concurrency=1))
+
+    async def contended() -> list[bool]:
+        results = await asyncio.gather(*(hasher.verify_async(None, SAMPLE) for _ in range(2)))
+        return [result.valid for result in results]
+
+    assert asyncio.run(contended()) == [False, False]
+    assert asyncio.run(contended()) == [False, False]
+
+
+def test_corrupted_hash_with_readable_parameters_costs_a_full_verification(
+    hasher: PasswordHasher, argon2_calls: list[str]
+) -> None:
+    # Paramètres lisibles, empreinte tronquée : argon2 refuse sans calcul (« Decoding failed »).
+    corrupted = hasher.hash(SAMPLE)[:-5]
+    argon2_calls.clear()
+
+    assert hasher.verify(corrupted, SAMPLE).valid is False
+    assert argon2_calls[-1] != corrupted
+    assert argon2_calls[-1].startswith("$argon2id$v=19$m=19456,t=2,p=1$")

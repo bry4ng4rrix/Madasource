@@ -8,6 +8,7 @@ exige en plus des origines HTTPS et refuse les journaux de débogage.
 Aucun fichier `.env` n'est lu implicitement : en local, `uv run --env-file ../.env` le charge.
 """
 
+import ipaddress
 from typing import Annotated, Literal, Self
 
 from pydantic import Field, SecretStr, field_validator, model_validator
@@ -35,6 +36,11 @@ MIN_SIGNING_KEY_LENGTH = 43
 MIN_SIGNING_KEY_DISTINCT_CHARACTERS = 16
 # Argon2id (S-01) : profils minimaux de l'OWASP (Password Storage Cheat Sheet, consultée le
 # 2026-10-16), tous de même niveau : 46 MiB x 1, 19 MiB x 2, 12 MiB x 3, 9 MiB x 4, 7 MiB x 5.
+# Plafonds des paramètres Argon2id : réglage courant et empreintes stockées (une empreinte
+# aux paramètres démesurés coûterait des secondes et des gigaoctets à vérifier).
+MAX_ARGON2_MEMORY_KIB = 256 * 1024
+MAX_ARGON2_TIME_COST = 10
+MAX_ARGON2_PARALLELISM = 8
 # Plancher : la mémoire minimale du profil correspondant au nombre d'itérations (au-delà de 5,
 # celle du profil à 5 itérations).
 OWASP_ARGON2_MIN_MEMORY_KIB: dict[int, int] = {
@@ -89,6 +95,19 @@ def has_explicit_test_target(url: URL) -> bool:
     return _has_explicit_server(url) and (url.database or "").endswith("_test")
 
 
+def _trusts_every_proxy(value: str) -> bool:
+    """`*`, ou un réseau de préfixe nul (`0.0.0.0/0`, `::/0`), qu'uvicorn accepte aussi."""
+    for entry in (part.strip() for part in value.split(",")):
+        if entry == "*":
+            return True
+        try:
+            if ipaddress.ip_network(entry, strict=False).prefixlen == 0:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
 def _parse_url(value: SecretStr) -> URL:
     return parse_database_url(value.get_secret_value())
 
@@ -121,9 +140,9 @@ class Settings(BaseSettings):
     # Secrets et primitives de sécurité (Jour 8, security-design.md §4, §15, §17).
     auth_signing_key: SecretStr
     # Profil OWASP m=19 MiB, t=2, p=1 (choix de l'utilisateur, 2026-10-16).
-    password_hash_memory_kib: int = Field(default=19 * 1024, le=256 * 1024)
-    password_hash_time_cost: int = Field(default=2, ge=1, le=10)
-    password_hash_parallelism: int = Field(default=1, ge=1, le=8)
+    password_hash_memory_kib: int = Field(default=19 * 1024, le=MAX_ARGON2_MEMORY_KIB)
+    password_hash_time_cost: int = Field(default=2, ge=1, le=MAX_ARGON2_TIME_COST)
+    password_hash_parallelism: int = Field(default=1, ge=1, le=MAX_ARGON2_PARALLELISM)
     # Calculs Argon2id simultanés par processus (mémoire : 19 MiB x 4 par défaut), puis
     # attente bornée avant 503 (proposé, Q-106 f).
     password_hash_max_concurrency: int = Field(default=4, ge=1, le=32)
@@ -214,7 +233,9 @@ class Settings(BaseSettings):
                     "(ASCII imprimable, sans espace, au moins "
                     f"{MIN_SIGNING_KEY_DISTINCT_CHARACTERS} caractères distincts)."
                 )
-            if self.forwarded_allow_ips is not None and "*" in self.forwarded_allow_ips:
+            if self.forwarded_allow_ips is not None and _trusts_every_proxy(
+                self.forwarded_allow_ips
+            ):
                 problems.append(
                     f"FORWARDED_ALLOW_IPS ne peut pas contenir * en {self.app_env} : un client "
                     "choisirait son adresse."

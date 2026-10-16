@@ -383,10 +383,15 @@ def test_handmade_signing_key_is_accepted_locally() -> None:
     assert make_settings(auth_signing_key="a" * 43).app_env == "local"
 
 
-@pytest.mark.parametrize("value", ["*", "10.0.0.1,*"])
+@pytest.mark.parametrize("value", ["*", "10.0.0.1,*", "0.0.0.0/0", "::/0", "10.0.0.1, 0.0.0.0/0"])
 def test_deployed_environment_refuses_trusting_every_proxy(value: str) -> None:
     with pytest.raises(ValidationError, match="FORWARDED_ALLOW_IPS"):
         make_settings(**DEPLOYED, forwarded_allow_ips=value)
+
+
+@pytest.mark.parametrize("value", ["10.0.0.1", "10.0.0.0/8, 192.168.1.10", "unix:/run/proxy.sock"])
+def test_deployed_environment_accepts_a_known_proxy_list(value: str) -> None:
+    assert make_settings(**DEPLOYED, forwarded_allow_ips=value).forwarded_allow_ips == value
 
 
 def test_deployed_environment_accepts_a_known_proxy() -> None:

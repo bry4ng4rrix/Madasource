@@ -75,12 +75,14 @@ class InMemoryRateLimiter:
     ) -> None:
         self._clock = clock
         self._max_keys = max_keys
-        self._rules: dict[str, OrderedDict[bytes, deque[float]]] = {}
+        # Indexé par la règle entière (nom, limite, fenêtre) : deux règles de même nom mais de
+        # paramètres différents ne partagent pas leurs compteurs.
+        self._rules: dict[RateLimitRule, OrderedDict[bytes, deque[float]]] = {}
 
     async def hit(self, rule: RateLimitRule, key: str) -> RateLimitDecision:
         now = self._clock()
         horizon = now - rule.window_seconds
-        buckets = self._rules.setdefault(rule.name, OrderedDict())
+        buckets = self._rules.setdefault(rule, OrderedDict())
         digest = hashlib.sha256(key.encode(errors="surrogatepass")).digest()
         events = buckets.get(digest)
         if events is None:

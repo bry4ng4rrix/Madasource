@@ -19,13 +19,20 @@ import hashlib
 import hmac
 import secrets
 import unicodedata
+import weakref
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from argon2 import PasswordHasher as _Argon2Hasher
-from argon2 import Type
-from argon2.exceptions import InvalidHashError, VerificationError
+from argon2 import Type, extract_parameters
+from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
-from app.core.config import Settings
+from app.core.config import (
+    MAX_ARGON2_MEMORY_KIB,
+    MAX_ARGON2_PARALLELISM,
+    MAX_ARGON2_TIME_COST,
+    Settings,
+)
 from app.core.exceptions import PasswordPolicyError, ServiceUnavailableError
 
 # 256 bits d'aléa (S-04) : 43 caractères en base64 URL.
@@ -105,8 +112,12 @@ class PasswordHasher:
         )
         self._max_password_length = max_password_length
         # Au plus `max_concurrency` calculs simultanés : la mémoire reste bornée et le pool
-        # de fils partagé n'est pas saturé. Au-delà du délai d'attente : 503.
-        self._slots = asyncio.Semaphore(max_concurrency)
+        # de fils partagé n'est pas saturé. Au-delà du délai d'attente : 503. Un sémaphore
+        # par boucle d'événements (un sémaphore asyncio est lié à la boucle qui l'attend).
+        self._max_concurrency = max_concurrency
+        self._semaphores: weakref.WeakKeyDictionary[
+            asyncio.AbstractEventLoop, asyncio.Semaphore
+        ] = weakref.WeakKeyDictionary()
         self._queue_timeout_seconds = queue_timeout_seconds
         # Hachage d'une valeur aléatoire jamais conservée : vérifié quand le compte n'existe
         # pas ou que son empreinte est illisible, pour que la durée de la réponse ne révèle
@@ -145,14 +156,18 @@ class PasswordHasher:
         if stored_hash is None:
             self._verify_quietly(self._dummy_hash, candidate)
             return PasswordVerification(valid=False)
-        try:
-            self._hasher.verify(stored_hash, candidate)
-        except InvalidHashError:
+        if not _has_bounded_parameters(stored_hash):
             self._verify_quietly(self._dummy_hash, candidate)
             return PasswordVerification(valid=False)
-        except VerificationError:
-            # Mot de passe différent (VerifyMismatchError, sous-classe de VerificationError) :
-            # le calcul complet a déjà eu lieu.
+        try:
+            self._hasher.verify(stored_hash, candidate)
+        except VerifyMismatchError:
+            # Mot de passe différent : le calcul complet a déjà eu lieu.
+            return PasswordVerification(valid=False)
+        except InvalidHashError, VerificationError:
+            # Empreinte illisible ou tronquée (« Decoding failed »…) : refus immédiat
+            # d'argon2, compensé par un calcul sur l'empreinte factice.
+            self._verify_quietly(self._dummy_hash, candidate)
             return PasswordVerification(valid=False)
         return PasswordVerification(
             valid=True, needs_rehash=self._hasher.check_needs_rehash(stored_hash)
@@ -160,39 +175,59 @@ class PasswordHasher:
 
     async def hash_async(self, password: str) -> str:
         """Comme `hash`, dans un fil du pool : le calcul ne bloque pas la boucle d'événements."""
-        async with self._slot():
-            return await asyncio.to_thread(self.hash, password)
+        return await self._offload(self.hash, password)
 
     async def verify_async(self, stored_hash: str | None, password: str) -> PasswordVerification:
-        async with self._slot():
-            return await asyncio.to_thread(self.verify, stored_hash, password)
+        return await self._offload(self.verify, stored_hash, password)
 
-    def _slot(self) -> _Slot:
-        return _Slot(self._slots, self._queue_timeout_seconds)
+    async def _offload[**P, T](self, func: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
+        """Exécute `func` dans un fil, une place de calcul occupée jusqu'à la fin du fil.
+
+        Si l'appelant est annulé, le fil continue (un fil ne s'interrompt pas) : la place
+        n'est rendue qu'à sa fin, pour que la borne de concurrence reste vraie.
+        """
+        semaphore = self._semaphore()
+        try:
+            async with asyncio.timeout(self._queue_timeout_seconds):
+                await semaphore.acquire()
+        except TimeoutError:
+            raise ServiceUnavailableError(
+                "The service is busy. Retry later.", retry_after=1
+            ) from None
+        future = asyncio.ensure_future(asyncio.to_thread(func, *args, **kwargs))
+
+        def release(done: asyncio.Future[T]) -> None:
+            semaphore.release()
+            if not done.cancelled():
+                done.exception()  # récupérée : pas d'avertissement si l'appelant est parti
+
+        future.add_done_callback(release)
+        return await asyncio.shield(future)
+
+    def _semaphore(self) -> asyncio.Semaphore:
+        loop = asyncio.get_running_loop()
+        semaphore = self._semaphores.get(loop)
+        if semaphore is None:
+            semaphore = asyncio.Semaphore(self._max_concurrency)
+            self._semaphores[loop] = semaphore
+        return semaphore
 
     def _verify_quietly(self, stored_hash: str, candidate: str) -> None:
         with contextlib.suppress(InvalidHashError, VerificationError):
             self._hasher.verify(stored_hash, candidate)
 
 
-class _Slot:
-    """Place de calcul : attente bornée, puis 503 (dépendance saturée, réessayable)."""
-
-    def __init__(self, semaphore: asyncio.Semaphore, timeout_seconds: float) -> None:
-        self._semaphore = semaphore
-        self._timeout_seconds = timeout_seconds
-
-    async def __aenter__(self) -> None:
-        try:
-            async with asyncio.timeout(self._timeout_seconds):
-                await self._semaphore.acquire()
-        except TimeoutError:
-            raise ServiceUnavailableError(
-                "The service is busy. Retry later.", retry_after=1
-            ) from None
-
-    async def __aexit__(self, *_: object) -> None:
-        self._semaphore.release()
+def _has_bounded_parameters(stored_hash: str) -> bool:
+    """Faux pour une empreinte illisible ou aux paramètres au-delà des plafonds de Settings."""
+    try:
+        parameters = extract_parameters(stored_hash)
+    except InvalidHashError, ValueError:
+        return False
+    return (
+        parameters.memory_cost <= MAX_ARGON2_MEMORY_KIB
+        and parameters.time_cost <= MAX_ARGON2_TIME_COST
+        and parameters.parallelism <= MAX_ARGON2_PARALLELISM
+    )
 
 
 def generate_token() -> str:
@@ -207,11 +242,11 @@ def hash_token(token: str) -> str:
     qu'une fuite de la base ne livre aucun jeton utilisable. Une empreinte par usage
     (rafraîchissement, vérification, réinitialisation) : colonnes ou tables distinctes.
     """
-    return hashlib.sha256(token.encode()).hexdigest()
+    # surrogatepass : un jeton reçu non encodable (surrogate isolé) donne une empreinte qui ne
+    # correspond à aucune autre, au lieu d'une erreur 500.
+    return hashlib.sha256(token.encode(errors="surrogatepass")).hexdigest()
 
 
 def token_matches(token: str, stored_hash: str) -> bool:
-    """Comparaison en temps constant ; faux pour un jeton non encodable."""
-    if not _is_encodable(token):
-        return False
+    """Comparaison en temps constant de l'empreinte d'un jeton reçu et de l'empreinte stockée."""
     return hmac.compare_digest(hash_token(token), stored_hash)

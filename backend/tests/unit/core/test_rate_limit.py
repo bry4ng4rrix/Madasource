@@ -161,3 +161,14 @@ async def test_unencodable_key_is_accepted(limiter: InMemoryRateLimiter) -> None
 )
 def test_client_addresses_are_normalized(host: str, expected: str) -> None:
     assert normalize_ip(host) == expected
+
+
+async def test_rules_with_the_same_name_do_not_share_counters(
+    limiter: InMemoryRateLimiter,
+) -> None:
+    strict = RateLimitRule(name="test-same", limit=1, window_seconds=60)
+    lenient = RateLimitRule(name="test-same", limit=100, window_seconds=60)
+    await limiter.hit(strict, "test-ip-1")
+
+    assert (await limiter.hit(strict, "test-ip-1")).allowed is False
+    assert (await limiter.hit(lenient, "test-ip-1")).allowed is True
