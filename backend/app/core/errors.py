@@ -24,7 +24,7 @@ from sqlalchemy.exc import DBAPIError
 from starlette.datastructures import MutableHeaders
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.core.config import Settings
+from app.core.config import DEPLOYED_ENVIRONMENTS, Settings
 from app.core.exceptions import DEFAULT_RETRY_AFTER_SECONDS, AppError
 from app.core.logging import summarize_exception
 from app.core.middleware import (
@@ -235,6 +235,7 @@ def _internal_error_response(request: Request, exc: BaseException) -> JSONRespon
 def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
     allowed_origins = frozenset(settings.cors_allowed_origins)
     demo = settings.app_env == "demo"
+    hsts = settings.app_env in DEPLOYED_ENVIRONMENTS
 
     # Les gestionnaires ne reçoivent que le type pour lequel ils sont enregistrés.
     async def handle_app_error(request: Request, exc: Exception) -> JSONResponse:
@@ -307,7 +308,9 @@ def register_exception_handlers(app: FastAPI, settings: Settings) -> None:
         l'extérieur des autres middlewares : l'identifiant de requête, les en-têtes de
         sécurité et les en-têtes CORS sont donc posés ici (C31)."""
         response = _internal_error_response(request, exc)
-        apply_response_headers(response.headers, request_id=_request_id(request), demo=demo)
+        apply_response_headers(
+            response.headers, request_id=_request_id(request), demo=demo, hsts=hsts
+        )
         _apply_cors_headers(response.headers, request, allowed_origins)
         return response
 

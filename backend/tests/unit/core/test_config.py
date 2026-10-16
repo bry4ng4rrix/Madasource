@@ -1,5 +1,7 @@
 """Configuration validée au démarrage (D-11)."""
 
+import secrets
+
 import pytest
 from pydantic import ValidationError
 
@@ -313,7 +315,7 @@ def test_example_signing_key_is_accepted_locally() -> None:
 
 @pytest.mark.parametrize(
     ("memory_kib", "time_cost"),
-    [(46 * 1024, 1), (19 * 1024, 2), (12 * 1024, 3), (9 * 1024, 4), (7 * 1024, 5)],
+    [(46 * 1024, 1), (19 * 1024, 2), (12 * 1024, 3), (9 * 1024, 4), (7 * 1024, 5), (7 * 1024, 10)],
 )
 def test_owasp_argon2_profiles_are_accepted(memory_kib: int, time_cost: int) -> None:
     settings = make_settings(password_hash_memory_kib=memory_kib, password_hash_time_cost=time_cost)
@@ -322,7 +324,17 @@ def test_owasp_argon2_profiles_are_accepted(memory_kib: int, time_cost: int) -> 
 
 
 @pytest.mark.parametrize(
-    ("memory_kib", "time_cost"), [(19 * 1024, 1), (6 * 1024, 10), (12 * 1024, 2), (1024, 1)]
+    ("memory_kib", "time_cost"),
+    [
+        # Juste sous chaque profil de l'OWASP (un produit mémoire x itérations ne suffit pas).
+        (46 * 1024 - 1, 1),
+        (36 * 1024, 1),
+        (19 * 1024 - 1, 2),
+        (12 * 1024 - 1, 3),
+        (9 * 1024 - 1, 4),
+        (7 * 1024 - 1, 5),
+        (7 * 1024 - 1, 10),
+    ],
 )
 def test_argon2_below_owasp_minimums_is_refused(memory_kib: int, time_cost: int) -> None:
     with pytest.raises(ValidationError, match="minimums de l'OWASP"):
@@ -339,3 +351,45 @@ def test_security_defaults() -> None:
     ) == (19 * 1024, 2, 1)
     assert (settings.password_min_length, settings.password_max_length) == (12, 128)
     assert settings.max_request_body_bytes == 1024 * 1024
+
+
+DEPLOYED = {
+    "app_env": "production",
+    "database_url": PRODUCTION_URL,
+    "cors_allowed_origins": ("https://app.example.com",),
+}
+
+
+@pytest.mark.parametrize(
+    "key",
+    ["a" * 43, " " * 43, "\u00e9" * 43, "abcdefghij" * 5, "test-key with spaces " + "x" * 30],
+)
+def test_deployed_environment_refuses_handmade_signing_key(key: str) -> None:
+    with pytest.raises(ValidationError, match="générée aléatoirement") as excinfo:
+        make_settings(**DEPLOYED, auth_signing_key=key)
+
+    assert key not in str(excinfo.value)
+
+
+def test_deployed_environment_accepts_generated_signing_key() -> None:
+    key = secrets.token_urlsafe(48)
+
+    assert (
+        make_settings(**DEPLOYED, auth_signing_key=key).auth_signing_key.get_secret_value() == key
+    )
+
+
+def test_handmade_signing_key_is_accepted_locally() -> None:
+    assert make_settings(auth_signing_key="a" * 43).app_env == "local"
+
+
+@pytest.mark.parametrize("value", ["*", "10.0.0.1,*"])
+def test_deployed_environment_refuses_trusting_every_proxy(value: str) -> None:
+    with pytest.raises(ValidationError, match="FORWARDED_ALLOW_IPS"):
+        make_settings(**DEPLOYED, forwarded_allow_ips=value)
+
+
+def test_deployed_environment_accepts_a_known_proxy() -> None:
+    assert (
+        make_settings(**DEPLOYED, forwarded_allow_ips="10.0.0.1").forwarded_allow_ips == "10.0.0.1"
+    )

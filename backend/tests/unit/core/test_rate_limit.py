@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.core.rate_limit import InMemoryRateLimiter, RateLimitRule
+from app.core.rate_limit import InMemoryRateLimiter, RateLimitRule, normalize_ip
 
 pytestmark = [pytest.mark.unit, pytest.mark.anyio]
 
@@ -101,8 +101,8 @@ async def test_tracked_keys_are_bounded(clock: FakeClock) -> None:
     # La clé la plus ancienne est oubliée quand une troisième arrive.
     await limiter.hit(one_shot, "test-ip-3")
 
-    assert len(limiter._events) == 2
     assert (await limiter.hit(one_shot, "test-ip-1")).allowed is True
+    assert (await limiter.hit(one_shot, "test-ip-3")).allowed is False
 
 
 async def test_recently_used_key_is_kept(clock: FakeClock) -> None:
@@ -120,3 +120,44 @@ async def test_recently_used_key_is_kept(clock: FakeClock) -> None:
 def test_invalid_rule_is_refused(limit: int, window: float) -> None:
     with pytest.raises(ValueError, match="limit"):
         RateLimitRule(name="test-bad", limit=limit, window_seconds=window)
+
+
+async def test_flooding_one_rule_does_not_reset_another(clock: FakeClock) -> None:
+    limiter = InMemoryRateLimiter(clock=clock, max_keys=10)
+    flooded = RateLimitRule(name="test-signup", limit=1, window_seconds=60)
+    for _ in range(3):
+        await limiter.hit(RULE, "test-victim@example.com")
+    for index in range(50):
+        await limiter.hit(flooded, f"test-noise-{index}")
+
+    assert (await limiter.hit(RULE, "test-victim@example.com")).allowed is False
+
+
+async def test_long_keys_are_stored_as_fixed_size_digests(limiter: InMemoryRateLimiter) -> None:
+    long_key = "test-" + "k" * 1_000_000
+    for _ in range(3):
+        await limiter.hit(RULE, long_key)
+
+    assert (await limiter.hit(RULE, long_key)).allowed is False
+    assert (await limiter.hit(RULE, long_key + "x")).allowed is True
+    stored_keys = [key for buckets in limiter._rules.values() for key in buckets]
+    assert {len(key) for key in stored_keys} == {32}
+
+
+async def test_unencodable_key_is_accepted(limiter: InMemoryRateLimiter) -> None:
+    assert (await limiter.hit(RULE, "test-\ud800")).allowed is True
+
+
+@pytest.mark.parametrize(
+    ("host", "expected"),
+    [
+        ("203.0.113.7", "203.0.113.7"),
+        ("::ffff:203.0.113.7", "203.0.113.7"),
+        ("2001:db8:1:2:aaaa::1", "2001:db8:1:2::/64"),
+        ("2001:db8:1:2:ffff:ffff:ffff:ffff", "2001:db8:1:2::/64"),
+        ("2001:db8:1:3::1", "2001:db8:1:3::/64"),
+        ("testclient", "testclient"),
+    ],
+)
+def test_client_addresses_are_normalized(host: str, expected: str) -> None:
+    assert normalize_ip(host) == expected

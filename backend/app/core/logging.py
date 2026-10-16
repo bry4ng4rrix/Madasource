@@ -39,6 +39,9 @@ SENSITIVE_KEY_PARTS = (
     "credential",
     "pepper",
     "otp",
+    "jwt",
+    "bearer",
+    "signature",
 )
 # Attributs propres à LogRecord : tout autre attribut vient de `extra=`. `color_message`
 # est ajouté par uvicorn (codes de couleur ANSI), inutile dans un journal JSON.

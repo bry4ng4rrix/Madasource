@@ -29,11 +29,21 @@ MIN_DEPLOYED_PASSWORD_LENGTH = 12
 # Clé de signature des jetons (Jour 10) : au moins 256 bits, soit 43 caractères en base64 URL
 # (`python -c "import secrets; print(secrets.token_urlsafe(48))"`).
 MIN_SIGNING_KEY_LENGTH = 43
+# Environnements déployés : clé sans espace, en ASCII imprimable, d'au moins 16 caractères
+# distincts. Ce n'est pas une mesure d'entropie : seulement le refus des clés manifestement
+# fabriquées à la main (« aaaa… », espaces) ; proposé, Q-106 d.
+MIN_SIGNING_KEY_DISTINCT_CHARACTERS = 16
 # Argon2id (S-01) : profils minimaux de l'OWASP (Password Storage Cheat Sheet, consultée le
 # 2026-10-16), tous de même niveau : 46 MiB x 1, 19 MiB x 2, 12 MiB x 3, 9 MiB x 4, 7 MiB x 5.
-# Plancher retenu : mémoire ≥ 7 MiB et mémoire x itérations ≥ 35 MiB (le plus faible d'entre eux).
-MIN_ARGON2_MEMORY_KIB = 7 * 1024
-MIN_ARGON2_MEMORY_TIME_KIB = 7 * 1024 * 5
+# Plancher : la mémoire minimale du profil correspondant au nombre d'itérations (au-delà de 5,
+# celle du profil à 5 itérations).
+OWASP_ARGON2_MIN_MEMORY_KIB: dict[int, int] = {
+    1: 46 * 1024,
+    2: 19 * 1024,
+    3: 12 * 1024,
+    4: 9 * 1024,
+    5: 7 * 1024,
+}
 # Environnements où la documentation interactive et le schéma OpenAPI sont servis
 # (api-conventions.md §13 ; désactivés en production et en démonstration publique).
 DOCS_ENVIRONMENTS: frozenset[str] = frozenset({"local", "test", "staging"})
@@ -103,14 +113,21 @@ class Settings(BaseSettings):
     database_idle_in_transaction_timeout_ms: int = Field(default=60_000, ge=1_000, le=3_600_000)
     readiness_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
     cors_allowed_origins: Annotated[tuple[str, ...], NoDecode] = ()
+    # Lue aussi par uvicorn (adresses des proxys dignes de confiance, `X-Forwarded-For`) :
+    # vérifiée ici pour refuser `*` en déploiement (Q-106 e).
+    forwarded_allow_ips: str | None = None
     log_level: LogLevel = "INFO"
     demo_mode: bool = False
     # Secrets et primitives de sécurité (Jour 8, security-design.md §4, §15, §17).
     auth_signing_key: SecretStr
     # Profil OWASP m=19 MiB, t=2, p=1 (choix de l'utilisateur, 2026-10-16).
-    password_hash_memory_kib: int = Field(default=19 * 1024, le=1024 * 1024)
+    password_hash_memory_kib: int = Field(default=19 * 1024, le=256 * 1024)
     password_hash_time_cost: int = Field(default=2, ge=1, le=10)
     password_hash_parallelism: int = Field(default=1, ge=1, le=8)
+    # Calculs Argon2id simultanés par processus (mémoire : 19 MiB x 4 par défaut), puis
+    # attente bornée avant 503 (proposé, Q-106 f).
+    password_hash_max_concurrency: int = Field(default=4, ge=1, le=32)
+    password_hash_queue_timeout_seconds: float = Field(default=5.0, gt=0, le=30)
     # Politique de mot de passe proposée, À VALIDER (Q-76). Bornes disjointes (min ≤ 64 ≤ max) :
     # le minimum ne peut pas dépasser le maximum.
     password_min_length: int = Field(default=12, ge=8, le=64)
@@ -162,13 +179,11 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def _check_environment(self) -> Self:
         problems: list[str] = []
-        if self.password_hash_memory_kib < MIN_ARGON2_MEMORY_KIB or (
-            self.password_hash_memory_kib * self.password_hash_time_cost
-            < MIN_ARGON2_MEMORY_TIME_KIB
-        ):
+        owasp_floor = OWASP_ARGON2_MIN_MEMORY_KIB[min(self.password_hash_time_cost, 5)]
+        if self.password_hash_memory_kib < owasp_floor:
             problems.append(
-                "Paramètres Argon2id sous les minimums de l'OWASP (mémoire ≥ 7 MiB, "
-                "mémoire x itérations ≥ 35 MiB)."
+                "Paramètres Argon2id sous les minimums de l'OWASP (46, 19, 12, 9 ou 7 MiB "
+                "pour 1, 2, 3, 4 ou 5 itérations et plus)."
             )
         if self.demo_mode != (self.app_env == "demo"):
             problems.append("DEMO_MODE=true exige APP_ENV=demo, et inversement (D-18).")
@@ -186,9 +201,23 @@ class Settings(BaseSettings):
                 problems.append(
                     f"Le mot de passe d'exemple de .env.example est refusé en {self.app_env}."
                 )
-            if PLACEHOLDER_MARKER in self.auth_signing_key.get_secret_value().lower():
+            signing_key = self.auth_signing_key.get_secret_value()
+            if PLACEHOLDER_MARKER in signing_key.lower():
                 problems.append(
                     f"La clé de signature d'exemple de .env.example est refusée en {self.app_env}."
+                )
+            if not (signing_key.isascii() and signing_key.isprintable()) or (
+                " " in signing_key or len(set(signing_key)) < MIN_SIGNING_KEY_DISTINCT_CHARACTERS
+            ):
+                problems.append(
+                    f"En {self.app_env}, AUTH_SIGNING_KEY doit être générée aléatoirement "
+                    "(ASCII imprimable, sans espace, au moins "
+                    f"{MIN_SIGNING_KEY_DISTINCT_CHARACTERS} caractères distincts)."
+                )
+            if self.forwarded_allow_ips is not None and "*" in self.forwarded_allow_ips:
+                problems.append(
+                    f"FORWARDED_ALLOW_IPS ne peut pas contenir * en {self.app_env} : un client "
+                    "choisirait son adresse."
                 )
             if len(password) < MIN_DEPLOYED_PASSWORD_LENGTH:
                 problems.append(

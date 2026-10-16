@@ -244,9 +244,10 @@ Format : question — contexte — jour bloqué ou influencé.
 - **Q-106** — (J8) Primitives de sécurité, proposées et appliquées en attendant :
   - (a) taille maximale d'un corps de requête : 1 MiB (`MAX_REQUEST_BODY_BYTES`), hors dépôts de documents (Jour 29) ;
   - (b) HSTS en `staging`, `production` et `demo` : `max-age=31536000; includeSubDomains`, sans `preload` ; suppose que tous les sous-domaines servent du HTTPS ;
-  - (c) limitation de débit par processus : avec plusieurs workers ou instances, une limite de N devient N par processus, jusqu'au passage à un stockage partagé ; le limiteur oublie les clés au-delà de 100 000 ;
-  - (d) clé de signature : longueur minimale seulement (43 caractères), pas de mesure d'entropie ; procédure de rotation à écrire (Audit D) ;
-  - (e) adresse du client derrière un reverse proxy : `--proxy-headers` et `--forwarded-allow-ips` à fixer avec le déploiement (Q-79).
+  - (c) limitation de débit par processus : avec plusieurs workers ou instances, une limite de N devient N par processus, jusqu'au passage à un stockage partagé ; le limiteur oublie les clés au-delà de 100 000 : une clé oubliée repart de zéro, donc un attaquant qui envoie assez de clés fictives (adresses IPv6 d'un même /64, ou identifiants de compte choisis par lui) peut remettre à zéro le compteur de sa cible ; au Jour 10, combiner adresse et compte, regrouper les adresses IPv6 par /64, et ne jamais prendre une clé fournie par le client seule ;
+  - (d) clé de signature : 43 caractères au moins ; en déploiement, ASCII imprimable sans espace et 16 caractères distincts au moins (ajout de l'audit, plus strict que le choix initial « longueur seule ») ; pas de mesure d'entropie ; procédure de rotation à écrire (Audit D) ;
+  - (e) adresse du client derrière un reverse proxy : `FORWARDED_ALLOW_IPS` à fixer avec le déploiement (Q-79), avant le premier endpoint limité (Jour 10) ; `*` refusé en déploiement ; avec plusieurs workers (`--workers N`), la limite effective est multipliée par N ;
+  - (f) concurrence Argon2id : 4 calculs simultanés par processus, attente de 5 s puis 503 ; à rapprocher de la limite mémoire du conteneur, non fixée dans `docker-compose.yml`.
   — security-design §4, §15, §16, §17 ; `app/core/security.py`, `rate_limit.py`, `middleware.py` — avant le Jour 10 (a, c) ; au déploiement (b, e).
 
 ### 4.17 Transverse

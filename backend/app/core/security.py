@@ -2,8 +2,10 @@
 
 - Mots de passe : Argon2id par argon2-cffi (S-01), paramètres OWASP par défaut, rehachage
   transparent quand ils changent, vérification à durée comparable pour un compte inexistant
-  (S-06). Le hachage s'exécute hors de la boucle d'événements.
+  ou une empreinte illisible (S-06). Le hachage s'exécute hors de la boucle d'événements, avec
+  un nombre borné de calculs simultanés (mémoire : paramètre x concurrence).
 - Politique de mot de passe : longueurs seulement, sans règle de composition (S-02, Q-76).
+  La saisie brute est bornée avant toute normalisation (coût de NFKC sur une entrée géante).
 - Jetons opaques (rafraîchissement, vérification d'email, réinitialisation : S-04, S-07) :
   256 bits aléatoires, seule leur empreinte SHA-256 est stockée, comparaison en temps constant.
 
@@ -12,6 +14,7 @@ Aucune cryptographie maison : uniquement argon2-cffi et la bibliothèque standar
 """
 
 import asyncio
+import contextlib
 import hashlib
 import hmac
 import secrets
@@ -20,10 +23,10 @@ from dataclasses import dataclass
 
 from argon2 import PasswordHasher as _Argon2Hasher
 from argon2 import Type
-from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
+from argon2.exceptions import InvalidHashError, VerificationError
 
 from app.core.config import Settings
-from app.core.exceptions import PasswordPolicyError
+from app.core.exceptions import PasswordPolicyError, ServiceUnavailableError
 
 # 256 bits d'aléa (S-04) : 43 caractères en base64 URL.
 TOKEN_BYTES = 32
@@ -37,15 +40,61 @@ class PasswordVerification:
     needs_rehash: bool = False
 
 
+def _is_encodable(text: str) -> bool:
+    """Faux pour une chaîne non encodable en UTF-8 (surrogate isolé, accepté par le JSON)."""
+    try:
+        text.encode()
+    except UnicodeEncodeError:
+        return False
+    return True
+
+
 def normalize_password(password: str) -> str:
-    """Forme NFKC : une même saisie donne le même hachage quel que soit le clavier."""
+    """Forme NFKC : une même saisie donne le même hachage quel que soit le clavier.
+
+    À n'appeler que sur une saisie déjà bornée (`check_password_policy`, `verify`).
+    """
     return unicodedata.normalize("NFKC", password)
 
 
-class PasswordHasher:
-    """Hachage Argon2id configuré par `Settings` ; sans état propre à un utilisateur."""
+def check_password_policy(password: str, *, min_length: int, max_length: int) -> None:
+    """Longueurs de la politique (S-02 ; valeurs : Q-76), sans règle de composition.
 
-    def __init__(self, *, memory_cost_kib: int, time_cost: int, parallelism: int) -> None:
+    - Saisie brute plus longue que le maximum : refusée avant normalisation.
+    - Minimum : sur la plus courte des deux formes, brute et normalisée, pour qu'une
+      ligature qui s'étend en NFKC (« ﷺ » : 18 caractères) ne compte pas pour plusieurs.
+    - Maximum : sur la plus longue des deux.
+    Le refus des mots de passe compromis exige une liste ou un service externe : non
+    implémenté, À VALIDER (Q-76).
+    """
+    if len(password) > max_length:
+        raise PasswordPolicyError("The password is too long.")
+    if not _is_encodable(password):
+        raise PasswordPolicyError("The password contains invalid characters.")
+    normalized = normalize_password(password)
+    if min(len(password), len(normalized)) < min_length:
+        raise PasswordPolicyError("The password is too short.")
+    if len(normalized) > max_length:
+        raise PasswordPolicyError("The password is too long.")
+
+
+class PasswordHasher:
+    """Hachage Argon2id configuré par `Settings` ; sans état propre à un utilisateur.
+
+    Le constructeur calcule l'empreinte factice (un hachage complet) : une seule instance par
+    application, créée au démarrage (`app.state.password_hasher`), jamais une par requête.
+    """
+
+    def __init__(
+        self,
+        *,
+        memory_cost_kib: int,
+        time_cost: int,
+        parallelism: int,
+        max_password_length: int,
+        max_concurrency: int = 4,
+        queue_timeout_seconds: float = 5.0,
+    ) -> None:
         self._hasher = _Argon2Hasher(
             time_cost=time_cost,
             memory_cost=memory_cost_kib,
@@ -54,8 +103,14 @@ class PasswordHasher:
             salt_len=16,
             type=Type.ID,
         )
+        self._max_password_length = max_password_length
+        # Au plus `max_concurrency` calculs simultanés : la mémoire reste bornée et le pool
+        # de fils partagé n'est pas saturé. Au-delà du délai d'attente : 503.
+        self._slots = asyncio.Semaphore(max_concurrency)
+        self._queue_timeout_seconds = queue_timeout_seconds
         # Hachage d'une valeur aléatoire jamais conservée : vérifié quand le compte n'existe
-        # pas, pour que la durée de la réponse ne révèle pas son existence (S-06).
+        # pas ou que son empreinte est illisible, pour que la durée de la réponse ne révèle
+        # ni l'un ni l'autre (S-06).
         self._dummy_hash = self._hasher.hash(secrets.token_urlsafe(TOKEN_BYTES))
 
     @classmethod
@@ -64,19 +119,40 @@ class PasswordHasher:
             memory_cost_kib=settings.password_hash_memory_kib,
             time_cost=settings.password_hash_time_cost,
             parallelism=settings.password_hash_parallelism,
+            max_password_length=settings.password_max_length,
+            max_concurrency=settings.password_hash_max_concurrency,
+            queue_timeout_seconds=settings.password_hash_queue_timeout_seconds,
         )
 
     def hash(self, password: str) -> str:
+        """Empreinte d'un mot de passe déjà accepté par `check_password_policy`."""
+        if len(password) > self._max_password_length or not _is_encodable(password):
+            raise PasswordPolicyError("The password does not satisfy the policy.")
         return self._hasher.hash(normalize_password(password))
 
     def verify(self, stored_hash: str | None, password: str) -> PasswordVerification:
-        """Vérifie un mot de passe. `stored_hash=None` (compte inexistant) : toujours faux,
-        après un calcul de même coût."""
+        """Vérifie un mot de passe, toujours au prix d'un calcul Argon2id complet.
+
+        Refus, après un calcul sur l'empreinte factice : compte inexistant
+        (`stored_hash=None`), empreinte stockée illisible, saisie trop longue ou non
+        encodable. L'écart de durée restant (empreinte faite avec d'anciens paramètres) est
+        inhérent au rehachage progressif.
+        """
+        if len(password) > self._max_password_length or not _is_encodable(password):
+            self._verify_quietly(self._dummy_hash, "")
+            return PasswordVerification(valid=False)
         candidate = normalize_password(password)
         if stored_hash is None:
             self._verify_quietly(self._dummy_hash, candidate)
             return PasswordVerification(valid=False)
-        if not self._verify_quietly(stored_hash, candidate):
+        try:
+            self._hasher.verify(stored_hash, candidate)
+        except InvalidHashError:
+            self._verify_quietly(self._dummy_hash, candidate)
+            return PasswordVerification(valid=False)
+        except VerificationError:
+            # Mot de passe différent (VerifyMismatchError, sous-classe de VerificationError) :
+            # le calcul complet a déjà eu lieu.
             return PasswordVerification(valid=False)
         return PasswordVerification(
             valid=True, needs_rehash=self._hasher.check_needs_rehash(stored_hash)
@@ -84,32 +160,39 @@ class PasswordHasher:
 
     async def hash_async(self, password: str) -> str:
         """Comme `hash`, dans un fil du pool : le calcul ne bloque pas la boucle d'événements."""
-        return await asyncio.to_thread(self.hash, password)
+        async with self._slot():
+            return await asyncio.to_thread(self.hash, password)
 
     async def verify_async(self, stored_hash: str | None, password: str) -> PasswordVerification:
-        return await asyncio.to_thread(self.verify, stored_hash, password)
+        async with self._slot():
+            return await asyncio.to_thread(self.verify, stored_hash, password)
 
-    def _verify_quietly(self, stored_hash: str, candidate: str) -> bool:
+    def _slot(self) -> _Slot:
+        return _Slot(self._slots, self._queue_timeout_seconds)
+
+    def _verify_quietly(self, stored_hash: str, candidate: str) -> None:
+        with contextlib.suppress(InvalidHashError, VerificationError):
+            self._hasher.verify(stored_hash, candidate)
+
+
+class _Slot:
+    """Place de calcul : attente bornée, puis 503 (dépendance saturée, réessayable)."""
+
+    def __init__(self, semaphore: asyncio.Semaphore, timeout_seconds: float) -> None:
+        self._semaphore = semaphore
+        self._timeout_seconds = timeout_seconds
+
+    async def __aenter__(self) -> None:
         try:
-            return self._hasher.verify(stored_hash, candidate)
-        except VerifyMismatchError:
-            return False
-        except InvalidHashError, VerificationError:
-            # Hachage stocké illisible ou corrompu : refus, sans exception vers l'appelant.
-            return False
+            async with asyncio.timeout(self._timeout_seconds):
+                await self._semaphore.acquire()
+        except TimeoutError:
+            raise ServiceUnavailableError(
+                "The service is busy. Retry later.", retry_after=1
+            ) from None
 
-
-def check_password_policy(password: str, *, min_length: int, max_length: int) -> None:
-    """Longueur en caractères après normalisation NFKC (S-02 ; valeurs : Q-76).
-
-    Pas de règle de composition. Le refus des mots de passe compromis (S-02) exige une liste
-    ou un service externe : non implémenté, À VALIDER (Q-76).
-    """
-    length = len(normalize_password(password))
-    if length < min_length:
-        raise PasswordPolicyError("The password is too short.")
-    if length > max_length:
-        raise PasswordPolicyError("The password is too long.")
+    async def __aexit__(self, *_: object) -> None:
+        self._semaphore.release()
 
 
 def generate_token() -> str:
@@ -121,11 +204,14 @@ def hash_token(token: str) -> str:
     """Empreinte SHA-256 (hexadécimale) stockée à la place du jeton.
 
     Un jeton de 256 bits aléatoires n'a pas besoin d'un hachage lent : SHA-256 suffit à ce
-    qu'une fuite de la base ne livre aucun jeton utilisable.
+    qu'une fuite de la base ne livre aucun jeton utilisable. Une empreinte par usage
+    (rafraîchissement, vérification, réinitialisation) : colonnes ou tables distinctes.
     """
     return hashlib.sha256(token.encode()).hexdigest()
 
 
 def token_matches(token: str, stored_hash: str) -> bool:
-    """Comparaison en temps constant de l'empreinte d'un jeton reçu et de l'empreinte stockée."""
+    """Comparaison en temps constant ; faux pour un jeton non encodable."""
+    if not _is_encodable(token):
+        return False
     return hmac.compare_digest(hash_token(token), stored_hash)

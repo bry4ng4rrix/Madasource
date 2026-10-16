@@ -159,8 +159,10 @@ Toutes sont documentées dans `.env.example` (racine), avec des valeurs factices
 | `LOG_LEVEL` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
 | `CORS_ALLOWED_ORIGINS` | Origines autorisées, séparées par des virgules |
 | `DEMO_MODE` | `true` seulement avec `APP_ENV=demo` (D-18) |
-| `AUTH_SIGNING_KEY` | **Obligatoire** : clé de signature des jetons (Jour 10), au moins 43 caractères ; la valeur d'exemple (`changeme…`) est refusée en `staging`, `production` et `demo` |
-| `PASSWORD_HASH_MEMORY_KIB`, `PASSWORD_HASH_TIME_COST`, `PASSWORD_HASH_PARALLELISM` | Argon2id (19456, 2, 1 : profil OWASP) ; refusés sous les minimums de l'OWASP |
+| `AUTH_SIGNING_KEY` | **Obligatoire** : clé de signature des jetons (Jour 10), au moins 43 caractères ; en `staging`, `production` et `demo` : valeur d'exemple (`changeme…`) refusée, ASCII imprimable sans espace, au moins 16 caractères distincts |
+| `PASSWORD_HASH_MEMORY_KIB`, `PASSWORD_HASH_TIME_COST`, `PASSWORD_HASH_PARALLELISM` | Argon2id (19456, 2, 1 : profil OWASP) ; refusés sous les profils de l'OWASP |
+| `PASSWORD_HASH_MAX_CONCURRENCY`, `PASSWORD_HASH_QUEUE_TIMEOUT_SECONDS` | Calculs Argon2id simultanés par processus (4), puis attente (5 s) avant 503 `SERVICE_UNAVAILABLE` (Q-106 f) |
+| `FORWARDED_ALLOW_IPS` | Adresses des proxys dignes de confiance, lue aussi par uvicorn ; `*` refusé en `staging`, `production`, `demo` |
 | `PASSWORD_MIN_LENGTH`, `PASSWORD_MAX_LENGTH` | Politique de mot de passe (12, 128 : proposition, Q-76) |
 | `MAX_REQUEST_BODY_BYTES` | Taille maximale d'un corps de requête (1 MiB) ; au-delà, 413 `PAYLOAD_TOO_LARGE` |
 | `DATABASE_POOL_SIZE`, `DATABASE_MAX_OVERFLOW`, `DATABASE_CONNECT_TIMEOUT_SECONDS`, `DATABASE_STATEMENT_TIMEOUT_MS`, `DATABASE_LOCK_TIMEOUT_MS`, `DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS`, `READINESS_TIMEOUT_SECONDS` | Réglages facultatifs de la base (délais : Q-103) |

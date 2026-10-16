@@ -64,7 +64,9 @@ class PermissionDeniedError(AppError):
 
 
 class PayloadTooLargeError(AppError):
-    """Corps de requête au-delà de la taille maximale (security-design.md §15)."""
+    """Corps ou fichier au-delà de la taille permise, levée par un service (dépôts de documents,
+    Jour 29). Le middleware de taille des corps lève, lui, une `HTTPException(413)`, que
+    FastAPI relaie pendant la lecture du corps (security-design.md §15)."""
 
     status_code = HTTPStatus.CONTENT_TOO_LARGE
     code = "PAYLOAD_TOO_LARGE"

@@ -22,6 +22,7 @@ from app.core.middleware import (
     RequestContextMiddleware,
 )
 from app.core.rate_limit import InMemoryRateLimiter
+from app.core.security import PasswordHasher
 from app.db.session import create_engine, create_session_factory
 
 API_TITLE = "MadaSource API"
@@ -67,6 +68,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Limiteur propre au processus (app/core/rate_limit.py) : un stockage partagé le
     # remplacera quand plusieurs instances seront déployées.
     app.state.rate_limiter = InMemoryRateLimiter()
+    # Instance unique : son constructeur calcule l'empreinte factice (S-06). Utilisée au Jour 10.
+    app.state.password_hasher = PasswordHasher.from_settings(settings)
 
     register_exception_handlers(app, settings)
     # Le plus interne : la taille du corps est contrôlée au moment où FastAPI le lit.

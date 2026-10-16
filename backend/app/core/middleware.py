@@ -15,6 +15,7 @@ d'erreur et ne pas interférer avec la diffusion des réponses.
 """
 
 import logging
+import re
 import time
 import uuid
 from collections.abc import MutableMapping
@@ -43,6 +44,8 @@ SECURITY_HEADERS: dict[str, str] = {
 }
 # Environnements déployés seulement, derrière HTTPS : un an, sous-domaines compris. Sans
 # `preload`, qui engage le domaine durablement (décision du propriétaire du domaine).
+# Longueur déclarée lisible : chiffres ASCII seulement, 19 au plus (entier sur 64 bits).
+_CONTENT_LENGTH = re.compile(r"[0-9]{1,19}")
 HSTS_HEADER = ("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 
 access_logger = logging.getLogger("app.access")
@@ -158,7 +161,7 @@ class BodySizeLimitMiddleware:
 
         async def limited_receive() -> Message:
             nonlocal received
-            if declared is not None and not declared.isdigit():
+            if declared is not None and _CONTENT_LENGTH.fullmatch(declared) is None:
                 # Longueur illisible (négative, non numérique) : requête mal formée.
                 raise HTTPException(status_code=400)
             if declared is not None and int(declared) > max_bytes:

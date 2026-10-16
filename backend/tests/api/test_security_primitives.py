@@ -16,6 +16,7 @@ pytestmark = pytest.mark.api
 
 LIMIT = 1024
 PROBE_RULE = RateLimitRule(name="test-probe", limit=2, window_seconds=60)
+HSTS = "max-age=31536000; includeSubDomains"
 
 
 class Probe(BaseModel):
@@ -102,9 +103,11 @@ def test_rate_limit_returns_problem_with_retry_after(probe_client: TestClient) -
     assert 1 <= int(response.headers["retry-after"]) <= 60
 
 
-def test_rate_limit_is_per_application_instance(probe_client: TestClient) -> None:
-    # Chaque application (processus) a son limiteur : rien ne fuit d'un test à l'autre.
-    assert probe_client.get("/test-probe/limited").status_code == 200
+def test_each_application_has_its_own_limiter() -> None:
+    # Un limiteur par application (par processus) : rien ne fuit d'une instance à l'autre.
+    first, second = create_app(make_settings()), create_app(make_settings())
+
+    assert first.state.rate_limiter is not second.state.rate_limiter
 
 
 def test_framing_is_refused_on_every_response(client: TestClient) -> None:
@@ -118,15 +121,30 @@ def test_no_hsts_outside_deployed_environments(client: TestClient) -> None:
     assert "strict-transport-security" not in client.get("/api/v1/health/live").headers
 
 
-@pytest.mark.parametrize("app_env", ["staging", "production"])
+@pytest.mark.parametrize("app_env", ["staging", "production", "demo"])
 def test_hsts_in_deployed_environments(app_env: str) -> None:
-    origins = ("https://app.example.com",)
     app: FastAPI = create_app(
         make_settings(
-            app_env=app_env, database_url=DEPLOYED_DATABASE_URL, cors_allowed_origins=origins
+            app_env=app_env,
+            demo_mode=app_env == "demo",
+            database_url=DEPLOYED_DATABASE_URL,
+            cors_allowed_origins=("https://app.example.com",),
         )
     )
-    with TestClient(app) as deployed:
-        headers = deployed.get("/api/v1/health/live").headers
 
-    assert headers["strict-transport-security"] == "max-age=31536000; includeSubDomains"
+    @app.get("/test-probe/boom")
+    async def boom() -> None:
+        raise RuntimeError("test-unexpected")
+
+    # raise_server_exceptions=False : la réponse 500 réelle, produite hors des middlewares.
+    with TestClient(app, raise_server_exceptions=False) as deployed:
+        responses = [
+            deployed.get("/api/v1/health/live"),
+            deployed.get("/test-probe/unknown"),
+            deployed.get("/test-probe/boom"),
+        ]
+
+    assert [r.status_code for r in responses] == [200, 404, 500]
+    for response in responses:
+        assert response.headers["strict-transport-security"] == HSTS
+        assert response.headers["x-frame-options"] == "DENY"

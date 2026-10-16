@@ -12,6 +12,8 @@ Les règles par endpoint (connexion, inscription, réinitialisation…) seront p
 endpoints, à partir du Jour 10 ; leurs seuils sont À VALIDER (Q-76).
 """
 
+import hashlib
+import ipaddress
 import math
 import time
 from collections import OrderedDict, deque
@@ -23,9 +25,13 @@ from fastapi import Request
 
 from app.core.exceptions import RateLimitedError
 
-# Nombre maximal de clés suivies : au-delà, les plus anciennes sont oubliées, pour qu'un
-# attaquant qui varie les clés (adresses, comptes) ne puisse pas épuiser la mémoire.
+# Nombre maximal de clés suivies **par règle** : au-delà, la moins récemment consultée est
+# oubliée, pour qu'un attaquant qui varie les clés
+# (adresses, comptes) ne puisse pas épuiser la mémoire. Une règle saturée n'affecte pas les
+# autres. Une clé oubliée repart de zéro (risque résiduel, Q-106 c).
 DEFAULT_MAX_KEYS = 100_000
+# Les adresses IPv6 d'un même /64 (un abonné) partagent une clé.
+IPV6_PREFIX_LENGTH = 64
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,10 +60,11 @@ class RateLimiter(Protocol):
 
 
 class InMemoryRateLimiter:
-    """Fenêtre glissante exacte (journal des instants), par processus.
+    """Fenêtre glissante exacte (journal des instants), par règle et par processus.
 
     Les appels ne contiennent aucun `await` : dans une boucle d'événements, chaque `hit` est
-    atomique sans verrou. Horloge monotone, injectable pour les tests.
+    atomique sans verrou. Horloge monotone, injectable pour les tests. Les clés sont réduites
+    à leur empreinte SHA-256 : taille fixe en mémoire, quelle que soit la saisie.
     """
 
     def __init__(
@@ -68,20 +75,22 @@ class InMemoryRateLimiter:
     ) -> None:
         self._clock = clock
         self._max_keys = max_keys
-        self._events: OrderedDict[tuple[str, str], deque[float]] = OrderedDict()
+        self._rules: dict[str, OrderedDict[bytes, deque[float]]] = {}
 
     async def hit(self, rule: RateLimitRule, key: str) -> RateLimitDecision:
         now = self._clock()
-        bucket_key = (rule.name, key)
-        events = self._events.get(bucket_key)
-        if events is None:
-            events = deque()
-            self._events[bucket_key] = events
-            while len(self._events) > self._max_keys:
-                self._events.popitem(last=False)
-        else:
-            self._events.move_to_end(bucket_key)
         horizon = now - rule.window_seconds
+        buckets = self._rules.setdefault(rule.name, OrderedDict())
+        digest = hashlib.sha256(key.encode(errors="surrogatepass")).digest()
+        events = buckets.get(digest)
+        if events is None:
+            if len(buckets) >= self._max_keys:
+                # Entrée la moins récemment consultée : en tête de l'ordre d'utilisation.
+                buckets.popitem(last=False)
+            events = deque()
+            buckets[digest] = events
+        else:
+            buckets.move_to_end(digest)
         while events and events[0] <= horizon:
             events.popleft()
         if len(events) >= rule.limit:
@@ -99,7 +108,25 @@ def client_ip(request: Request) -> str:
     `--forwarded-allow-ips` limité au proxy : sinon toutes les requêtes partagent l'adresse
     du proxy, ou un client pourrait choisir la sienne par `X-Forwarded-For`.
     """
-    return request.client.host if request.client else "unknown"
+    if request.client is None:
+        return "no-client-address"
+    return normalize_ip(request.client.host)
+
+
+def normalize_ip(host: str) -> str:
+    """Clé d'adresse : IPv4 telle quelle (y compris une IPv4 transportée en IPv6,
+    `::ffff:a.b.c.d`), IPv6 réduite à son préfixe /64. Une valeur qui n'est pas une adresse
+    (socket Unix, nom) est gardée telle quelle."""
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return host
+    if isinstance(address, ipaddress.IPv6Address):
+        if address.ipv4_mapped is not None:
+            return str(address.ipv4_mapped)
+        network = ipaddress.IPv6Network((address, IPV6_PREFIX_LENGTH), strict=False)
+        return str(network)
+    return str(address)
 
 
 def rate_limit(

@@ -1,6 +1,7 @@
 """Aides partagées par les tests : configuration explicite, sans dépendre de l'environnement."""
 
 import os
+import string
 import sys
 from pathlib import Path
 from typing import Any
@@ -16,9 +17,10 @@ UNREACHABLE_DATABASE_URL = "postgresql+asyncpg://unused:unused@127.0.0.1:9/unrea
 ALLOWED_ORIGIN = "http://localhost:3000"
 # URL injoignable au mot de passe assez fort pour un environnement déployé (valeur factice).
 DEPLOYED_DATABASE_URL = "postgresql+asyncpg://madasource:StrongValue42xyz@127.0.0.1:9/madasource"
-# Clé de signature factice des tests : 48 caractères, sans le préfixe refusé en déploiement
-# (changeme) ; volontairement sans aléa, pour ne ressembler à aucun vrai secret.
-TEST_SIGNING_KEY = "test-" + "x" * 43
+# Clé de signature factice des tests : 48 caractères, sans le préfixe refusé
+# en déploiement (changeme) ; construite à partir de l'alphabet, sans aléa, pour ne
+# ressembler à aucun vrai secret.
+TEST_SIGNING_KEY = "test-" + string.ascii_letters[:43]
 
 
 def make_settings(**overrides: Any) -> Settings:
