@@ -11,11 +11,8 @@ UV_RUN := uv run --locked $(if $(ENV_FILE),--env-file $(ENV_FILE),)
 # Alembic sur la base de test seulement : propriétaire du schéma de TEST_MIGRATION_DATABASE_URL.
 ALEMBIC_TEST := $(UV_RUN) sh -c 'MIGRATION_DATABASE_URL="$$TEST_MIGRATION_DATABASE_URL" exec alembic "$$@"' alembic
 # Même garde-fou que les tests (testing-strategy.md §4) : une base dont le nom finit par _test.
-TEST_DB_GUARD := import os, sys; from app.core.config import parse_database_url; \
-	raw = os.environ.get("TEST_MIGRATION_DATABASE_URL", ""); \
-	try: name = parse_database_url(raw).database or "" if raw else ""; \
-	except ValueError: name = ""; \
-	sys.exit(None if name.endswith("_test") else "TEST_MIGRATION_DATABASE_URL doit être une URL valide vers une base dont le nom finit par _test")
+# Module Python (vérifié par Ruff, mypy et les tests), plutôt qu'un script en ligne.
+TEST_DB_GUARD := $(UV_RUN) python -m scripts.require_test_database
 
 .PHONY: help install lock-check lint format-check types imports quality test-fast test \
 	migrations-check docker-build check
@@ -50,7 +47,7 @@ test: ## Suite complète avec couverture (exige la base de test et TEST_* )
 	$(UV_RUN) pytest --cov
 
 migrations-check: ## Base de test : montée vers la tête, puis absence d'écart (TEST_MIGRATION_DATABASE_URL)
-	$(UV_RUN) python -c '$(TEST_DB_GUARD)'
+	$(TEST_DB_GUARD)
 	$(ALEMBIC_TEST) upgrade head
 	$(ALEMBIC_TEST) check
 

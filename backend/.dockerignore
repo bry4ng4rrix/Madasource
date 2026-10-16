@@ -14,5 +14,6 @@
 .coverage
 htmlcov/
 tests/
+scripts/
 Dockerfile
 .dockerignore
