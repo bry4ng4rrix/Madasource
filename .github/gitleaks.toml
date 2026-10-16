@@ -29,4 +29,4 @@ description = "Valeurs factices des tests de configuration et de journalisation,
 condition = "AND"
 paths = ['''^backend/tests/''']
 regexTarget = "secret"
-regexes = ['''^(?:StrongValue42(?:xyz)?|SuperSecret1|VerySecretPw42|\{password\})$''']
+regexes = ['''^(?:StrongValue42(?:xyz)?|SuperSecret1|VerySecretPw42|\{password\}|test-secret)$''']

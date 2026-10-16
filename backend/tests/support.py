@@ -9,7 +9,7 @@ import pytest
 from alembic import command
 from alembic.config import Config
 
-from app.core.config import Settings, parse_database_url
+from app.core.config import Settings, has_explicit_test_target, parse_database_url
 
 # Aucun service n'écoute sur ce port : toute connexion est refusée immédiatement.
 UNREACHABLE_DATABASE_URL = "postgresql+asyncpg://unused:unused@127.0.0.1:9/unreachable"
@@ -55,8 +55,11 @@ def database_urls_for_tests() -> tuple[str, str]:
         )
     app_target, migration_target = parse_database_url(app_url), parse_database_url(migration_url)
     targets = {(u.host, u.port, u.database) for u in (app_target, migration_target)}
-    if len(targets) != 1 or not (app_target.database or "").endswith("_test"):
-        pytest.fail("Les URL de test doivent viser la même base, dont le nom finit par _test.")
+    if len(targets) != 1 or not has_explicit_test_target(app_target):
+        pytest.fail(
+            "Les URL de test doivent viser la même base, dont le nom finit par _test, "
+            "avec un hôte et un port explicites."
+        )
     return app_url, migration_url
 
 

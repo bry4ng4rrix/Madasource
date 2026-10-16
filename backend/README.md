@@ -43,8 +43,8 @@ Point d'entrée unique : `backend/Makefile`, exécuté tel quel par la CI (secti
 | Tests sans base | `make test-fast` | `pytest -m "not integration"` (sélection, pas la suite complète) |
 | Contrôles rapides | `make check` | `quality`, puis `test-fast` |
 | Base de test (avant les tests) | `docker compose --profile test up -d --wait db-test` (depuis la racine) | |
-| Tests : suite complète | `make test ENV_FILE=../.env` | `pytest --cov` : échec si la couverture de `app/` (lignes et branches) passe sous 95 % (Q-104) |
-| Migrations (base de test) | `make migrations-check ENV_FILE=../.env` | Refus de toute base dont le nom ne finit pas par `_test`, puis `alembic upgrade head` et `alembic check` avec `TEST_MIGRATION_DATABASE_URL`. Depuis une base vide si `db-test` vient de démarrer, ce qui est toujours le cas en CI |
+| Tests : suite complète | `make test ENV_FILE=../.env` | `pytest --cov` : échec si la couverture de `app/` et `scripts/` (lignes et branches) passe sous 95 % (Q-104) |
+| Migrations (base de test) | `make migrations-check ENV_FILE=../.env` | Refus de toute base dont le nom ne finit pas par `_test` (`scripts/require_test_database.py`), puis `alembic upgrade head` et `alembic check` avec `TEST_MIGRATION_DATABASE_URL`. Depuis une base vide si `db-test` vient de démarrer, ce qui est toujours le cas en CI |
 | Image Docker | `make docker-build` | `docker build`, sans envoi vers un registre, puis contrôle de l'utilisateur (`10001:10001`) de l'image tout juste construite (`--iidfile`) |
 | Serveur local | `uv run --env-file ../.env uvicorn --factory app.main:create_app --reload --port 8002 --no-access-log --no-server-header` | |
 
@@ -202,6 +202,8 @@ backend/
 │   ├── db/                     base.py (base déclarative, nommage, UUIDv7), registry.py (découverte des
 │   │                           modèles), roles.py (rôle applicatif), session.py (moteur, DbSession)
 │   └── modules/                paquet conteneur des modules métier (vide au Jour 7)
+├── scripts/                    require_test_database.py (garde-fou _test de make migrations-check) ;
+│                               outils du Makefile, absents de l'image Docker
 ├── alembic/                    env.py asynchrone ; versions/ : socle des droits sur le schéma (Jour 6)
 ├── tests/
 │   ├── unit/                   configuration, journaux, exceptions, base déclarative

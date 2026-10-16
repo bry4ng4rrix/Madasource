@@ -52,9 +52,9 @@ def test_invalid_database_url_error_does_not_reveal_it() -> None:
 
 def test_test_environment_requires_a_test_database() -> None:
     with pytest.raises(ValidationError, match="_test"):
-        make_settings(app_env="test", database_url="postgresql+asyncpg://u:p@h/madasource")
+        make_settings(app_env="test", database_url="postgresql+asyncpg://u:p@h:5434/madasource")
 
-    settings = make_settings(app_env="test", database_url="postgresql+asyncpg://u:p@h/x_test")
+    settings = make_settings(app_env="test", database_url="postgresql+asyncpg://u:p@h:5434/x_test")
     assert settings.database_name == "x_test"
 
 
@@ -192,6 +192,66 @@ def test_production_refuses_debug_logs() -> None:
             cors_allowed_origins=("https://app.example.com",),
             log_level="DEBUG",
         )
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        # asyncpg reçoit la requête telle quelle : chacune de ces clés remplacerait la cible
+        # vérifiée sur l'URL (garde-fou _test).
+        *(
+            f"{key}=Tail"
+            for key in [
+                "database",
+                "dbname",
+                "host",
+                "port",
+                "user",
+                "password",
+                "dsn",
+                "service",
+                "servicefile",
+                "passfile",
+                "target_session_attrs",
+            ]
+        ),
+        "%64atabase=Tail",
+        "SSL=Tail",
+        "ssl=require&ssl=Tail",
+    ],
+)
+def test_query_parameter_outside_allowlist_is_refused(query: str) -> None:
+    url = f"postgresql+asyncpg://madasource:pw@localhost:5434/madasource_test?{query}"
+    with pytest.raises(ValidationError) as excinfo:
+        make_settings(app_env="test", database_url=url)
+
+    assert "n'est pas une URL" in str(excinfo.value)
+    assert "Tail" not in str(excinfo.value)
+
+
+@pytest.mark.parametrize("query", ["ssl=require", "prepared_statement_cache_size=0"])
+def test_allowlisted_query_parameters_are_accepted(query: str) -> None:
+    url = f"postgresql+asyncpg://madasource:pw@localhost:5434/madasource?{query}"
+    assert make_settings(database_url=url).database_name == "madasource"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "postgresql+asyncpg://madasource:pw@/madasource_test",
+        "postgresql+asyncpg://madasource:pw@localhost/madasource_test",
+    ],
+    ids=["sans-hote", "sans-port"],
+)
+def test_test_environment_requires_explicit_host_and_port(url: str) -> None:
+    # Sinon asyncpg compléterait par PGHOST, PGPORT ou 5432 : un autre serveur que celui vérifié.
+    with pytest.raises(ValidationError, match="précise l'hôte et le port"):
+        make_settings(app_env="test", database_url=url)
+
+
+def test_local_environment_accepts_default_port() -> None:
+    url = "postgresql+asyncpg://madasource:pw@localhost/madasource"
+    assert make_settings(database_url=url).database_name == "madasource"
 
 
 @pytest.mark.parametrize(

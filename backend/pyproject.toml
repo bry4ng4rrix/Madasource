@@ -156,5 +156,5 @@ branch = true
 [tool.coverage.report]
 show_missing = true
 skip_covered = true
-# Seuil minimal : sous ce taux, la suite échoue (99,08 % mesurés au Jour 7 ; seuil : Q-104).
+# Seuil minimal : sous ce taux, la suite échoue (99,42 % mesurés le 2026-10-16 ; seuil : Q-104).
 fail_under = 95

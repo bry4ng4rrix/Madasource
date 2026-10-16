@@ -3,6 +3,8 @@
 Date : 2026-10-14 · Statut : **TERMINÉ AVEC RÉSERVES**. Réserves :
 - la CI ne bloque rien tant que la branche `main` n'est pas protégée sur GitHub (Q-104 f, action du propriétaire du dépôt) ;
 - la version du workflow corrigée après les revues n'a pas encore tourné sur GitHub : seule la version intermédiaire du commit `98dceb2` y a tourné, avec succès ;
+- **mise à jour du 2026-10-16** : la version corrigée a tourné et échoué (runs `38561360442` et `38859505687`) ; correctifs dans l'addendum en fin de rapport, rejoués en local, **à pousser** pour confirmer la CI sur GitHub ;
+- **Q-105** (addendum) : liste blanche des paramètres de requête des URL de base, hôte et port explicites pour les URL de test ;
 - **Q-104** : seuil de couverture, portée du délai de carence, conflit sur `ports`, réglages GitHub, outils supplémentaires, à valider ;
 - le dépôt GitHub est toujours public (Q-71, hérité) : les journaux de CI le sont aussi.
 
@@ -64,7 +66,7 @@ S'y ajoutent les éléments prévus pour ce jour par les documents des Jours 2 �
 | Revue de code (agent `code-reviewer`) | Prêt avec réserves, 0 bloquant. Importants : clés étrangères de même niveau non détectées ; tables non attribuées (`Table` brut, tables du socle) ignorées en silence. Mineurs : sous-paquet d'une interface publique accepté ; paquets fabriqués laissés dans `sys.modules` ; niveaux vérifiés sur 4 modules seulement ; règle `.claude/rules/backend-python.md` contraire à l'ajout de `ports` ; doc qui disait la CI « implémentée ». Tous corrigés, sauf les fichiers de configuration de Claude (règle, skill `pytest-workflow`), non modifiés sans ton accord |
 | Revue DevOps (agent `devops-engineer`) | 0 bloquant. Majeur : `make migrations-check` migrait la base de développement, sans garde-fou ; corrigé (base de test seulement, garde-fou `_test`, comme la CI). Mineurs : exceptions gitleaks possibles depuis un commit ; cache uv implicite ; délai de carence non appliqué à uv ; contrôle de l'utilisateur sur une image éventuellement périmée ; doc des migrations sur base vide. Corrigés ou ouverts en Q-104 |
 | Audit sécurité (agent `security-auditor`) | 0 critique, 3 moyens : aucune règle gitleaks pour un mot de passe dans une URL (règle `url-credentials` ajoutée, auto-test) ; CI qui ne bloque rien sans protection de `main` (Q-104 f) ; délai de carence affirmé mais non appliqué à uv et aux paquets Python (doc corrigée, Q-104 b). Faibles : contrôle `.env` trop étroit (étendu à `*.env`, `.envrc` et à l'historique) ; cache uv (désactivé) ; annulation des exécutions sur `main` (limitée aux pull requests) ; pull requests de forks (réglage GitHub, Q-104 f). Info : mot de passe recopié par `psql` en cas d'erreur (vérifié, corrigé par `VERBOSITY terse`) |
-| Vérification ciblée des correctifs (agents `devops-engineer`, `code-reviewer`) | VERIFICATION_A_COMPLETER |
+| Vérification ciblée des correctifs (agents `devops-engineer`, `code-reviewer`) | Non consignée le 2026-10-14. Remplacée par les revues et le rejeu complet du 2026-10-16 (addendum ci-dessous) |
 
 ## Commandes exécutées et résultats réels
 
@@ -77,7 +79,7 @@ S'y ajoutent les éléments prévus pour ce jour par les documents des Jours 2 �
 | `psql` sur une instruction fautive contenant une valeur factice, modes `default` puis `terse` (base de test) | `default` recopie la ligne avec le mot de passe ; `terse` n'affiche que la position. Rien n'a été créé |
 | gitleaks avec `.github/gitleaks.toml` sur tout l'historique | Avant les listes d'autorisation : 6 détections, toutes des valeurs factices de tests ; après : aucune fuite. Une valeur factice des tests placée hors de `backend/tests/` reste détectée |
 | Contrôles du job `secrets` dans des dépôts Git jetables | `.env` et `.env.local` refusés ; `prod.env` ajouté puis supprimé détecté dans l'historique ; `.envrc` refusé ; `.env.example` accepté. Auto-test : échoue si la règle `url-credentials` manque |
-| `make migrations-check` avec une base de développement, puis sans variable | Refus avant Alembic dans les deux cas (code 2) |
+| `make migrations-check` avec une base de développement, puis sans variable | Refus avant Alembic dans les deux cas (code 2). **Note du 2026-10-16** : ces refus venaient d'une `SyntaxError` du garde-fou, qui refusait aussi les bases `_test` ; le cas accepté n'avait pas été essayé (addendum) |
 | `make check` (final) | Ruff, format, mypy (38 fichiers), import-linter : OK ; **170 passed, 23 deselected** |
 | Rejeu du job `tests` sur une base **séparée et neuve** (projet Compose `madasource-ci`, port 5435, valeurs de `.env.example`), exactement comme en CI | Rôle `madasource_app` créé par le script modifié (non superutilisateur, `NOINHERIT`) ; aucun mot de passe dans les journaux du conteneur ; `make migrations-check` : les deux révisions appliquées depuis la base vide, « No new upgrade operations detected. » ; `make test` : **193 passed**, couverture **99,38 %** ; base arrêtée ensuite (`down` sans `-v`, données en mémoire) |
 | Rejeu du job `docker` | `docker compose config --quiet` OK avec et sans le profil `test` ; image construite ; utilisateur `10001:10001` de l'image construite |
@@ -132,5 +134,59 @@ Prérequis et décisions :
 - limitation de débit : en mémoire pour une instance, ou stockage partagé (Redis) à justifier (security-design §15, À VALIDER au Jour 8) ;
 - Q-102 et Q-103 restent ouverts ; Q-104 f est à traiter dès maintenant ;
 - le prochain push dira si la version corrigée du workflow passe sur GitHub.
+
+**Le Jour 8 ne sera pas lancé sans ta validation explicite.**
+
+## Addendum du 2026-10-16 — CI rouge sur GitHub, correctifs
+
+### Constats
+
+| Run GitHub (lu par l'API publique) | Résultat |
+|---|---|
+| `38561360442`, commit `670bff6` (version corrigée du workflow) | `quality`, `docker`, `secrets` réussis ; **`tests` en échec** à `make migrations-check` (code 2) |
+| `38859505687`, commit `cf87a82` (premier correctif, commité par toi) | **`tests` réussi** ; **`secrets` en échec** : gitleaks détecte, dans l'historique, le mot de passe factice `test-secret` du nouveau test (règle `url-credentials`) |
+
+Cause du premier échec : le garde-fou `_test` du `Makefile` était un script Python en une ligne, invalide (`try:` après `;`, `SyntaxError`). Il refusait toute URL, bases `_test` comprises. Le rapport du 2026-10-14 le disait vérifié : seuls les refus avaient été essayés, jamais le cas accepté.
+
+Le poste avait aussi perdu uv, Docker et `psql`, ainsi que `/var/lib/docker` (anciens volumes locaux, dont la base de développement) ; `backend/.venv` était corrompu (liens symboliques devenus des fichiers texte). Docker, Compose et `psql` réinstallés par toi ; uv 0.13.0 installé dans `~/.local/bin` (somme SHA-256 de `ci.yml` vérifiée) ; ancien environnement déplacé dans `backend/.venv.broken` (non supprimé), nouveau créé depuis `uv.lock`.
+
+### Correctifs
+
+| Fichier | Changement |
+|---|---|
+| `backend/scripts/require_test_database.py`, `scripts/__init__.py` (nouveaux, commit `cf87a82`) | Garde-fou de `make migrations-check` en module Python, vérifié par Ruff, mypy et les tests ; absent de l'image (`.dockerignore`) |
+| `backend/Makefile`, `pyproject.toml` | Appel `python -m scripts.require_test_database` ; `scripts` dans mypy et la couverture |
+| `backend/app/core/config.py` | `parse_database_url` : **liste blanche** des paramètres de requête (`ssl`, `prepared_statement_cache_size`, une fois chacun). En `APP_ENV=test` : hôte et port explicites. `has_explicit_test_target`, règle commune aux tests et au garde-fou (Q-105) |
+| `backend/tests/support.py` | Même règle pour les deux URL de test |
+| `backend/tests/unit/test_require_test_database.py`, `tests/unit/core/test_config.py` | Point d'entrée réel (`runpy`, comme `python -m`) ; cas acceptés et refusés, dont `?database=`, `?dsn=`, hôte ou port absents ; deux URL d'un test existant reçoivent un port explicite (même intention, mêmes assertions) |
+| `.github/gitleaks.toml` | `test-secret` ajoutée à la liste exacte des valeurs factices de `backend/tests/` : déjà dans l'historique public, une réécriture (push forcé) étant interdite |
+| `backend/README.md`, `docs/backend/testing-strategy.md` §4, §9, §10, `security-design.md` §17, `risks-and-open-questions.md` (Q-105) | Mis à jour |
+
+### Revues
+
+| Revue | Résultat |
+|---|---|
+| `code-reviewer` | Prêt avec réserves, 0 bloquant : documentation (README, testing-strategy), point d'entrée `python -m` non testé, assertion vraie par construction, double import. Corrigés |
+| `devops-engineer` | 0 bloquant. Moyen, antérieur : `?database=` contourne le garde-fou `_test` (asyncpg fusionne la requête dans les arguments de connexion). Mineurs : règle `_test` écrite trois fois, documentation. Corrigés |
+| `security-auditor` | Moyen : la première correction (liste noire) laissait passer `dsn`, qui change l'hôte et le port. Faibles : hôte ou port absents complétés par `PGHOST`/`PGPORT` ; `service`, `servicefile`, `passfile`. Corrigés par la liste blanche et la règle d'hôte et de port (Q-105). Info : `ssl=disable` accepté en production, hors périmètre (Q-105 e) |
+
+### Commandes exécutées et résultats réels
+
+| Commande | Résultat |
+|---|---|
+| `make check` | Ruff, format, mypy (41 fichiers), import-linter (2 contrats) : OK ; **201 passed, 23 deselected** |
+| Rejeu du job `tests` : projet Compose `madasource-ci`, valeurs de `.env.example`, base neuve | `make migrations-check` : deux révisions depuis la base vide, « No new upgrade operations detected. » ; `make test` : **224 passed**, couverture **99,42 %** ; aucun mot de passe dans les journaux du conteneur ; base arrêtée (`down` sans `-v`, données en mémoire) |
+| Garde-fou par `make migrations-check`, Alembic remplacé par un témoin | URL `_test` de `.env.example` : acceptée ; base de développement, URL vide : refus avant Alembic (code 2) |
+| Rejeu du job `docker` | `docker compose config --quiet` OK (avec et sans profil `test`) ; image construite, utilisateur `10001:10001` |
+| Rejeu du job `secrets` (étapes extraites du workflow, gitleaks 8.30.1 téléchargé dans le dossier temporaire de session, somme vérifiée) | 5 étapes réussies ; puis, après l'exception `test-secret` : historique (28 commits) et arbre de travail, aucune fuite |
+| Auto-test des hooks de Claude (`.claude/tests/test_hooks.py`) | 0 échec |
+
+Non exécuté : la CI sur GitHub avec ces correctifs (à pousser) ; `actionlint`, `zizmor` (Q-104 g).
+
+### Décisions À VALIDER ajoutées
+
+- **Q-105** a à e : liste blanche des paramètres de requête, refus du multi-hôte et du socket Unix, hôte et port explicites en test, limite de la règle `_test`, `ssl=disable` en production.
+- Exception gitleaks `test-secret` : valeur factice exacte, sous `backend/tests/` seulement (security-design §17).
+- Suppression de `backend/.venv.broken`, à ta convenance.
 
 **Le Jour 8 ne sera pas lancé sans ta validation explicite.**

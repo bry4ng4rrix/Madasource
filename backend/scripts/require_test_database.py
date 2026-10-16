@@ -8,21 +8,24 @@ fixe, sans citer l'URL.
 import os
 import sys
 
-from app.core.config import parse_database_url
+from app.core.config import has_explicit_test_target, parse_database_url
 
 VARIABLE = "TEST_MIGRATION_DATABASE_URL"
-REFUSAL = f"{VARIABLE} doit être une URL valide vers une base dont le nom finit par _test"
+REFUSAL = (
+    f"{VARIABLE} doit être une URL valide vers une base dont le nom finit par _test, "
+    "avec un hôte et un port explicites"
+)
 
 
 def is_test_database_url(raw: str | None) -> bool:
-    """Vrai seulement pour une URL valide dont la base se termine par _test."""
+    """Vrai seulement pour une URL valide, d'hôte et de port explicites, vers une base *_test."""
     if not raw:
         return False
     try:
-        name = parse_database_url(raw).database or ""
+        url = parse_database_url(raw)
     except ValueError:
         return False
-    return name.endswith("_test")
+    return has_explicit_test_target(url)
 
 
 def main() -> None:

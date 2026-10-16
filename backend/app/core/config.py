@@ -31,6 +31,11 @@ MIN_DEPLOYED_PASSWORD_LENGTH = 12
 DOCS_ENVIRONMENTS: frozenset[str] = frozenset({"local", "test", "staging"})
 
 _INVALID_URL_MESSAGE = "DATABASE_URL n'est pas une URL de base de données valide."
+# Seuls paramètres de requête admis, une fois chacun (liste blanche, À VALIDER : Q-105).
+# SQLAlchemy transmet la requête telle quelle à asyncpg.connect : `database`, `host`, `port`,
+# `user`, `password`, `dsn`, `service`, `servicefile` ou `passfile` y remplaceraient la cible
+# vérifiée sur l'URL (garde-fou _test, même cible pour les deux URL de test).
+_ALLOWED_QUERY_KEYS = frozenset({"ssl", "prepared_statement_cache_size"})
 
 
 def parse_database_url(raw: str) -> URL:
@@ -39,7 +44,9 @@ def parse_database_url(raw: str) -> URL:
     Utilisée par la configuration et par Alembic. Un mot de passe contenant « @ » ou « : »
     fait échouer l'analyse du port par une ValueError dont le message cite la fin de l'URL
     (constat E1) ; sans port, la fin du mot de passe glisserait dans l'hôte. Les deux cas
-    sont refusés avec un message fixe : encoder ces caractères (%40, %3A).
+    sont refusés avec un message fixe : encoder ces caractères (%40, %3A). La cible de la
+    connexion ne vient que de l'URL : un paramètre de requête hors de la liste blanche, ou
+    répété, est refusé.
     """
     try:
         url = make_url(raw)
@@ -47,7 +54,21 @@ def parse_database_url(raw: str) -> URL:
         raise ValueError(_INVALID_URL_MESSAGE) from None
     if url.host is not None and "@" in url.host:
         raise ValueError(_INVALID_URL_MESSAGE)
+    if not url.query.keys() <= _ALLOWED_QUERY_KEYS or any(
+        isinstance(value, tuple) for value in url.query.values()
+    ):
+        raise ValueError(_INVALID_URL_MESSAGE)
     return url
+
+
+def _has_explicit_server(url: URL) -> bool:
+    """L'URL nomme l'hôte et le port : rien n'est complété par l'environnement (PGHOST…)."""
+    return bool(url.host) and url.port is not None
+
+
+def has_explicit_test_target(url: URL) -> bool:
+    """Garde-fou des bases de test : hôte et port explicites, base dont le nom finit par _test."""
+    return _has_explicit_server(url) and (url.database or "").endswith("_test")
 
 
 def _parse_url(value: SecretStr) -> URL:
@@ -116,6 +137,10 @@ class Settings(BaseSettings):
             problems.append("DEMO_MODE=true exige APP_ENV=demo, et inversement (D-18).")
         if self.app_env == "test" and not self.database_name.endswith("_test"):
             problems.append("En APP_ENV=test, le nom de la base doit se terminer par _test.")
+        if self.app_env == "test" and not _has_explicit_server(_parse_url(self.database_url)):
+            # Sans hôte ni port dans l'URL, asyncpg les prendrait dans PGHOST, PGPORT ou les
+            # valeurs par défaut : le serveur réel ne serait plus celui qui a été vérifié.
+            problems.append("En APP_ENV=test, l'URL de la base précise l'hôte et le port.")
         if self.app_env in DEPLOYED_ENVIRONMENTS:
             password = _parse_url(self.database_url).password or ""
             if "*" in self.cors_allowed_origins:
